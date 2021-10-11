@@ -1,10 +1,12 @@
 import numpy as np
+from collections import defaultdict
 
 class Space:
     def __init__(self, N, extent):
         self.N = np.array(N)
         self.extent = np.array(extent)
-        self.d = self.extent / (self.N - 1)
+        self.delta = self.extent / (self.N - 1)
+        self.coords = np.meshgrid(*[ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)])
 
 class Fluid:
     def __init__(self, space, rho, nu):
@@ -12,30 +14,30 @@ class Fluid:
         self.rho = rho # density
         self.nu = nu
 
-        self.u = np.zeros(space.N + 2)
-        self.v = np.zeros(space.N + 2)
-        self.p = np.zeros(space.N + 2)
+        self.u = np.zeros(space.N)
+        self.v = np.zeros(space.N)
+        self.p = np.zeros(space.N)
 
         self._x0 = np.zeros_like(self.p)
         self._x1 = np.zeros_like(self.p)
 
-        self.bcs = []
+        self.bcs = defaultdict(list)
 
     def add_boundary_conditions(self, name, bcs):
-        self.bcs += [ (name, bc) for bc in bcs ]
+        self.bcs[name] += bcs
 
     def get_boundary_conditions(self, name):
-        return [ bc for bc_name, bc in self.bcs if bc_name == name ]
+        return self.bcs[name]
 
     def solve(self, dt, its):
         for _ in range(its):
-            self.solve_pressure_poisson(dt, its=10)
+            self.solve_pressure_poisson(dt, its=50)
             self.solve_momentum(dt)
 
     def solve_pressure_poisson(self, dt, its):
         p, pn = self.p, self._x0
 
-        dx,dy = self.space.d
+        dx,dy = self.space.delta
         u,v = self.u, self.v
         bcs = self.get_boundary_conditions('p')
 
@@ -53,7 +55,7 @@ class Fluid:
             np.copyto(p, pn)
 
     def solve_momentum(self, dt):
-        dx, dy = self.space.d
+        dx, dy = self.space.delta
         p = self.p
         u, un = self.u, self._x0
         v, vn = self.v, self._x1
@@ -101,7 +103,7 @@ class Boundary:
     def set_boundary(self, arr): pass
 
 def get_slice_indexer(arr, dim, ind):
-    ii = [ slice(None) for i in range(arr.ndim) ]
+    ii = [ slice(None) ] * arr.ndim
     ii[dim] = ind
     return tuple(ii)
 
@@ -124,14 +126,14 @@ class NeumannBoundary(Boundary):
         
 
 if __name__ == "__main__":
-    space = Space([51,51], [2,2])
-    fluid = Fluid(space, rho=.1, nu=.1)
+    space = Space([41,41], [2,2])
+    fluid = Fluid(space, rho=1, nu=.1)
 
     fluid.add_boundary_conditions('u', [
+        DirichletBoundary(dim=1, v=0, end=Boundary.MAX),
         DirichletBoundary(dim=0, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=0, v=1, end=Boundary.MAX), # lid driven 
         DirichletBoundary(dim=1, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=1, v=0, end=Boundary.MAX)
+        DirichletBoundary(dim=0, v=1, end=Boundary.MAX), # lid driven 
     ])
 
     fluid.add_boundary_conditions('v', [
@@ -142,15 +144,40 @@ if __name__ == "__main__":
     ])
 
     fluid.add_boundary_conditions('p', [
+        NeumannBoundary(dim=1, v=0, end=Boundary.MAX),
         NeumannBoundary(dim=0, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=0, v=0, end=Boundary.MAX),
+        #DirichletBoundary(dim=0, v=0, end=Boundary.MIN),
+        
+        #DirichletBoundary(dim=1, v=0, end=Boundary.MIN),
+        #DirichletBoundary(dim=1, v=0, end=Boundary.MAX),
         NeumannBoundary(dim=1, v=0, end=Boundary.MIN),
-        NeumannBoundary(dim=1, v=0, end=Boundary.MAX)
+        DirichletBoundary(dim=0, v=0, end=Boundary.MAX)
     ])
     
-    fluid.solve(dt=0.001, its=100)
+    fluid.solve(dt=0.001, its=3000)
 
     import matplotlib.pyplot as plt
-    plt.imshow(fluid.p)
+    import matplotlib.cm as cm
+
+    X,Y = fluid.space.coords
+    u,v,p = fluid.u, fluid.v, fluid.p
+
+    print(u)
+    print(v)
+    print(p)
+
+    plt.contourf(X, Y, p, alpha=0.5, cmap=cm.viridis)  
+    plt.colorbar()
+    # plotting the pressure field outlines
+    plt.contour(X, Y, p, cmap=cm.viridis)  
+    qs = 4
+    # plotting velocity field
+    #plt.quiver(X[::qs, ::qs], Y[::qs, ::qs], u[1:-1:qs, 1:-1:qs], v[1:-1:qs, 1:-1:qs]) 
+    plt.streamplot(X, Y, u, v) 
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.xlim([0,2])
+    plt.ylim([0,2])
+
     plt.show()
     
