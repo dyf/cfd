@@ -68,10 +68,14 @@ class Fluid:
     def get_boundary_conditions(self, name):
         return self.bcs[name]
 
-    def solve(self, dt, its, pits):
+    def solve(self, dt, its, pits, cb=None):
+        
         for _ in range(its):
             self.solve_pressure_poisson(dt, its=pits)
             self.solve_momentum(dt)
+
+            if cb:
+                cb()
 
     def solve_pressure_poisson(self, dt, its):
         p, pn, b = self.p, self._x[0], self._x[1]
@@ -137,9 +141,12 @@ class NeumannBoundary(Boundary):
 
         arr[idx] = arr[idx_n] - self.v * self.delta
 
-def plot(fluid):
-    import matplotlib.pyplot as plt
-    import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+
+def plot(fluid, fig):
+    plt.figure(fig.number)
+    plt.clf()
 
     X,Y = fluid.space.coords
     u,v,p = fluid.u, fluid.v, fluid.p
@@ -150,14 +157,15 @@ def plot(fluid):
     plt.contour(X, Y, p, cmap=cm.viridis)  
     qs = 4
     # plotting velocity field
-    #plt.quiver(X[::qs, ::qs], Y[::qs, ::qs], u[1:-1:qs, 1:-1:qs], v[1:-1:qs, 1:-1:qs]) 
+    #ax.quiver(X[::qs, ::qs], Y[::qs, ::qs], u[1:-1:qs, 1:-1:qs], v[1:-1:qs, 1:-1:qs]) 
     plt.streamplot(X, Y, u, v) 
     plt.xlabel('X')
     plt.ylabel('Y')
     plt.xlim([0,2])
     plt.ylim([0,2])
 
-    plt.show()
+    plt.show(block=False)
+    plt.pause(1e-6)
 
 if __name__ == "__main__":
     space = Space([81,81], [2,2])
@@ -184,9 +192,8 @@ if __name__ == "__main__":
         DirichletBoundary(dim=0, v=0, end=Boundary.MAX, delta=space.delta[0])
     ])
     
-    fluid.solve(dt=0.001, its=700, pits=50)
-
-    plot(fluid)
+    fig, ax = plt.subplots()
+    fluid.solve(dt=0.001, its=700, pits=50, cb=lambda: plot(fluid,fig))
 
     
     
