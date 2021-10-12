@@ -29,9 +29,9 @@ class Fluid:
     def get_boundary_conditions(self, name):
         return self.bcs[name]
 
-    def solve(self, dt, its):
+    def solve(self, dt, its, pits):
         for _ in range(its):
-            self.solve_pressure_poisson(dt, its=50)
+            self.solve_pressure_poisson(dt, its=pits)
             self.solve_momentum(dt)
 
     def solve_pressure_poisson(self, dt, its):
@@ -176,7 +176,7 @@ if __name__ == "__main__":
         DirichletBoundary(dim=0, v=0, end=Boundary.MAX)
     ])
     
-    fluid.solve(dt=0.001, its=700)
+    fluid.solve(dt=0.001, its=700, pits=50)
 
     plot(fluid)
 
