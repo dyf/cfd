@@ -8,6 +8,46 @@ class Space:
         self.delta = self.extent / (self.N - 1)
         self.coords = np.meshgrid(*[ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)])
 
+def pressure_poisson_2d_step(p, u, v, rho, dt, dx, dy, pout, b=None):
+    if b is None:
+        b = np.zeros_like(p)
+
+    b[1:-1,1:-1] = (rho * (1 / dt * 
+                    ((u[1:-1, 2:] - u[1:-1, 0:-2]) / 
+                     (2 * dx) + (v[2:, 1:-1] - v[0:-2, 1:-1]) / (2 * dy)) -
+                    ((u[1:-1, 2:] - u[1:-1, 0:-2]) / (2 * dx))**2 -
+                      2 * ((u[2:, 1:-1] - u[0:-2, 1:-1]) / (2 * dy) *
+                           (v[1:-1, 2:] - v[1:-1, 0:-2]) / (2 * dx))-
+                          ((v[2:, 1:-1] - v[0:-2, 1:-1]) / (2 * dy))**2))
+
+    pout[1:-1,1:-1] = (((p[1:-1, 2:] + p[1:-1, 0:-2]) * dy**2 + 
+                (p[2:, 1:-1] + p[0:-2, 1:-1]) * dx**2) /
+                (2 * (dx**2 + dy**2)) -
+                dx**2 * dy**2 / (2 * (dx**2 + dy**2)) * b[1:-1,1:-1])
+
+def momentum_2d_step(u, v, p, rho, nu, dt, dx, dy, uout, vout):
+    uout[1:-1, 1:-1] = (u[1:-1, 1:-1]-
+                         u[1:-1, 1:-1] * dt / dx *
+                        (u[1:-1, 1:-1] - u[1:-1, 0:-2]) -
+                         v[1:-1, 1:-1] * dt / dy *
+                        (u[1:-1, 1:-1] - u[0:-2, 1:-1]) -
+                         dt / (2 * rho * dx) * (p[1:-1, 2:] - p[1:-1, 0:-2]) +
+                         nu * (dt / dx**2 *
+                        (u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, 0:-2]) +
+                         dt / dy**2 *
+                        (u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[0:-2, 1:-1])))
+
+    vout[1:-1,1:-1] = (v[1:-1, 1:-1] -
+                    u[1:-1, 1:-1] * dt / dx *
+                    (v[1:-1, 1:-1] - v[1:-1, 0:-2]) -
+                    v[1:-1, 1:-1] * dt / dy *
+                    (v[1:-1, 1:-1] - v[0:-2, 1:-1]) -
+                    dt / (2 * rho * dy) * (p[2:, 1:-1] - p[0:-2, 1:-1]) +
+                    nu * (dt / dx**2 *
+                    (v[1:-1, 2:] - 2 * v[1:-1, 1:-1] + v[1:-1, 0:-2]) +
+                    dt / dy**2 *
+                    (v[2:, 1:-1] - 2 * v[1:-1, 1:-1] + v[0:-2, 1:-1])))
+
 class Fluid:
     def __init__(self, space, rho, nu):
         self.space = space
@@ -35,25 +75,14 @@ class Fluid:
             self.solve_momentum(dt)
 
     def solve_pressure_poisson(self, dt, its):
-        p, pn = self.p, self._x0
+        p, pn, b = self.p, self._x0, self._x1
 
         dx,dy = self.space.delta
         u,v = self.u, self.v
         bcs = self.get_boundary_conditions('p')
 
         for i in range(its):
-            b = (self.rho * (1 / dt * 
-                    ((u[1:-1, 2:] - u[1:-1, 0:-2]) / 
-                     (2 * dx) + (v[2:, 1:-1] - v[0:-2, 1:-1]) / (2 * dy)) -
-                    ((u[1:-1, 2:] - u[1:-1, 0:-2]) / (2 * dx))**2 -
-                      2 * ((u[2:, 1:-1] - u[0:-2, 1:-1]) / (2 * dy) *
-                           (v[1:-1, 2:] - v[1:-1, 0:-2]) / (2 * dx))-
-                          ((v[2:, 1:-1] - v[0:-2, 1:-1]) / (2 * dy))**2))
-
-            pn[1:-1,1:-1] = (((p[1:-1, 2:] + p[1:-1, 0:-2]) * dy**2 + 
-                          (p[2:, 1:-1] + p[0:-2, 1:-1]) * dx**2) /
-                          (2 * (dx**2 + dy**2)) -
-                          dx**2 * dy**2 / (2 * (dx**2 + dy**2)) * b)
+            pressure_poisson_2d_step(p, u, v, self.rho, dt, dx, dy, pout=pn, b=b)
 
             for bc in bcs:
                 bc.set_boundary(pn)
@@ -62,31 +91,10 @@ class Fluid:
 
     def solve_momentum(self, dt):
         dx, dy = self.space.delta
-        p = self.p
         u, un = self.u, self._x0
         v, vn = self.v, self._x1
 
-        un[1:-1, 1:-1] = (u[1:-1, 1:-1]-
-                         u[1:-1, 1:-1] * dt / dx *
-                        (u[1:-1, 1:-1] - u[1:-1, 0:-2]) -
-                         v[1:-1, 1:-1] * dt / dy *
-                        (u[1:-1, 1:-1] - u[0:-2, 1:-1]) -
-                         dt / (2 * self.rho * dx) * (p[1:-1, 2:] - p[1:-1, 0:-2]) +
-                         self.nu * (dt / dx**2 *
-                        (u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, 0:-2]) +
-                         dt / dy**2 *
-                        (u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[0:-2, 1:-1])))
-
-        vn[1:-1,1:-1] = (v[1:-1, 1:-1] -
-                        u[1:-1, 1:-1] * dt / dx *
-                       (v[1:-1, 1:-1] - v[1:-1, 0:-2]) -
-                        v[1:-1, 1:-1] * dt / dy *
-                       (v[1:-1, 1:-1] - v[0:-2, 1:-1]) -
-                        dt / (2 * self.rho * dy) * (p[2:, 1:-1] - p[0:-2, 1:-1]) +
-                        self.nu * (dt / dx**2 *
-                       (v[1:-1, 2:] - 2 * v[1:-1, 1:-1] + v[1:-1, 0:-2]) +
-                        dt / dy**2 *
-                       (v[2:, 1:-1] - 2 * v[1:-1, 1:-1] + v[0:-2, 1:-1])))
+        momentum_2d_step(u, v, self.p, self.rho, self.nu, dt, dx, dy, uout=un, vout=vn)
         
         for bc in self.get_boundary_conditions('u'):
             bc.set_boundary(un)
