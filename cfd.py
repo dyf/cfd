@@ -1,13 +1,6 @@
 import numpy as np
 from collections import defaultdict
 
-class Space:
-    def __init__(self, N, extent):
-        self.N = np.array(N)
-        self.extent = np.array(extent)
-        self.delta = self.extent / (self.N - 1)
-        self.coords = np.meshgrid(*[ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)])
-
 def pressure_poisson_2d_step(p, u, v, rho, dt, dx, dy, pout, b=None):
     if b is None:
         b = np.zeros_like(p)
@@ -47,6 +40,13 @@ def momentum_2d_step(u, v, p, rho, nu, dt, dx, dy, uout, vout):
                     (v[1:-1, 2:] - 2 * v[1:-1, 1:-1] + v[1:-1, 0:-2]) +
                     dt / dy**2 *
                     (v[2:, 1:-1] - 2 * v[1:-1, 1:-1] + v[0:-2, 1:-1])))
+
+class Space:
+    def __init__(self, N, extent):
+        self.N = np.array(N)
+        self.extent = np.array(extent)
+        self.delta = self.extent / (self.N - 1)
+        self.coords = np.meshgrid(*[ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)])
 
 class Fluid:
     def __init__(self, space, rho, nu):
@@ -109,10 +109,11 @@ class Boundary:
     MIN = 0
     MAX = -1
     
-    def __init__(self, v, dim, end):
+    def __init__(self, v, dim, end, delta=None):
         self.v = v
         self.dim = dim
         self.end = end
+        self.delta = delta 
     
     def set_boundary(self, arr): pass
 
@@ -135,7 +136,7 @@ class NeumannBoundary(Boundary):
             idx = get_slice_indexer(arr, self.dim, 0)
             idx_n = get_slice_indexer(arr, self.dim, 1)
 
-        arr[idx] = arr[idx_n]
+        arr[idx] = arr[idx_n] - self.v * self.delta
 
 def plot(fluid):
     import matplotlib.pyplot as plt
@@ -178,10 +179,10 @@ if __name__ == "__main__":
     ])
 
     fluid.add_boundary_conditions('p', [
-        NeumannBoundary(dim=1, v=0, end=Boundary.MAX),
-        NeumannBoundary(dim=0, v=0, end=Boundary.MIN),
-        NeumannBoundary(dim=1, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=0, v=0, end=Boundary.MAX)
+        NeumannBoundary(dim=1, v=0, end=Boundary.MAX, delta=space.delta[1]),
+        NeumannBoundary(dim=0, v=0, end=Boundary.MIN, delta=space.delta[0]),
+        NeumannBoundary(dim=1, v=0, end=Boundary.MIN, delta=space.delta[1]),
+        DirichletBoundary(dim=0, v=0, end=Boundary.MAX, delta=space.delta[0])
     ])
     
     fluid.solve(dt=0.001, its=700, pits=50)
