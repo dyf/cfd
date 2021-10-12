@@ -129,7 +129,27 @@ class NeumannBoundary(Boundary):
 
         arr[idx] = arr[idx_n]
 
-        
+def plot(fluid):
+    import matplotlib.pyplot as plt
+    import matplotlib.cm as cm
+
+    X,Y = fluid.space.coords
+    u,v,p = fluid.u, fluid.v, fluid.p
+
+    plt.contourf(X, Y, p, alpha=0.5, cmap=cm.viridis)  
+    plt.colorbar()
+    # plotting the pressure field outlines
+    plt.contour(X, Y, p, cmap=cm.viridis)  
+    qs = 4
+    # plotting velocity field
+    #plt.quiver(X[::qs, ::qs], Y[::qs, ::qs], u[1:-1:qs, 1:-1:qs], v[1:-1:qs, 1:-1:qs]) 
+    plt.streamplot(X, Y, u, v) 
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.xlim([0,2])
+    plt.ylim([0,2])
+
+    plt.show()
 
 if __name__ == "__main__":
     space = Space([41,41], [2,2])
@@ -152,38 +172,13 @@ if __name__ == "__main__":
     fluid.add_boundary_conditions('p', [
         NeumannBoundary(dim=1, v=0, end=Boundary.MAX),
         NeumannBoundary(dim=0, v=0, end=Boundary.MIN),
-        #DirichletBoundary(dim=0, v=0, end=Boundary.MIN),
-        
-        #DirichletBoundary(dim=1, v=0, end=Boundary.MIN),
-        #DirichletBoundary(dim=1, v=0, end=Boundary.MAX),
         NeumannBoundary(dim=1, v=0, end=Boundary.MIN),
         DirichletBoundary(dim=0, v=0, end=Boundary.MAX)
     ])
     
-    fluid.solve(dt=0.001, its=3000)
+    fluid.solve(dt=0.001, its=700)
 
-    import matplotlib.pyplot as plt
-    import matplotlib.cm as cm
+    plot(fluid)
 
-    X,Y = fluid.space.coords
-    u,v,p = fluid.u, fluid.v, fluid.p
-
-    print(u)
-    print(v)
-    print(p)
-
-    plt.contourf(X, Y, p, alpha=0.5, cmap=cm.viridis)  
-    plt.colorbar()
-    # plotting the pressure field outlines
-    plt.contour(X, Y, p, cmap=cm.viridis)  
-    qs = 4
-    # plotting velocity field
-    #plt.quiver(X[::qs, ::qs], Y[::qs, ::qs], u[1:-1:qs, 1:-1:qs], v[1:-1:qs, 1:-1:qs]) 
-    plt.streamplot(X, Y, u, v) 
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    plt.xlim([0,2])
-    plt.ylim([0,2])
-
-    plt.show()
+    
     
