@@ -19,7 +19,7 @@ def pressure_poisson_2d_step(p, u, v, rho, dt, dx, dy, pout, b=None):
                 dx**2 * dy**2 / (2 * (dx**2 + dy**2)) * b[1:-1,1:-1])
 
 def momentum_2d_step(u, v, p, rho, nu, dt, dx, dy, uout, vout):
-    uout[1:-1, 1:-1] = (u[1:-1, 1:-1]-
+    uout[1:-1, 1:-1] = (u[1:-1, 1:-1] -
                          u[1:-1, 1:-1] * dt / dx *
                         (u[1:-1, 1:-1] - u[1:-1, 0:-2]) -
                          v[1:-1, 1:-1] * dt / dy *
@@ -58,8 +58,7 @@ class Fluid:
         self.v = np.zeros(space.N)
         self.p = np.zeros(space.N)
 
-        self._x0 = np.zeros_like(self.p)
-        self._x1 = np.zeros_like(self.p)
+        self._x = [ np.zeros_like(self.p) for _ in range(2) ]
 
         self.bcs = defaultdict(list)
 
@@ -75,7 +74,7 @@ class Fluid:
             self.solve_momentum(dt)
 
     def solve_pressure_poisson(self, dt, its):
-        p, pn, b = self.p, self._x0, self._x1
+        p, pn, b = self.p, self._x[0], self._x[1]
 
         dx,dy = self.space.delta
         u,v = self.u, self.v
@@ -91,8 +90,8 @@ class Fluid:
 
     def solve_momentum(self, dt):
         dx, dy = self.space.delta
-        u, un = self.u, self._x0
-        v, vn = self.v, self._x1
+        u, un = self.u, self._x[0]
+        v, vn = self.v, self._x[1]
 
         momentum_2d_step(u, v, self.p, self.rho, self.nu, dt, dx, dy, uout=un, vout=vn)
         
@@ -161,14 +160,14 @@ def plot(fluid):
     plt.show()
 
 if __name__ == "__main__":
-    space = Space([41,41], [2,2])
+    space = Space([81,81], [2,2])
     fluid = Fluid(space, rho=1, nu=.1)
 
     fluid.add_boundary_conditions('u', [
-        DirichletBoundary(dim=1, v=0, end=Boundary.MAX),
         DirichletBoundary(dim=0, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=1, v=0, end=Boundary.MIN),
         DirichletBoundary(dim=0, v=1, end=Boundary.MAX), # lid driven 
+        DirichletBoundary(dim=1, v=0, end=Boundary.MIN),
+        DirichletBoundary(dim=1, v=0, end=Boundary.MAX),
     ])
 
     fluid.add_boundary_conditions('v', [
