@@ -51,6 +51,7 @@ class Space:
         self.delta = self.extent / (self.N - 1)
         self.coords = np.meshgrid(*[ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)])
 
+
 class Fluid:
     def __init__(self, space):
         self.space = space
@@ -69,12 +70,17 @@ class Fluid:
             for bc in bcs:
                 bc.apply(arr)
 
-        return x 
+        return x   
+
+    def solve(self, dt, cb=None, **kwargs):
+        raise NotImplementedError
+
 
 class NavierStokesFDM(Fluid):
     def __init__(self, space, rho, nu, f=None):
         super().__init__(space)
 
+        self.space = space
         self.rho = rho # density
         self.nu = nu
         self.f = np.zeros(2) if f is None else f
@@ -84,8 +90,9 @@ class NavierStokesFDM(Fluid):
         self.p = np.zeros(space.N)
 
         self._x = [ np.zeros_like(self.p) for _ in range(3) ]
-         
-    def solve(self, dt, its, p_tol, p_max_its, cb=None):
+
+
+    def solve(self, dt, cb=None, its=100, p_tol=1e-3, p_max_its=50):
         cb = cb if cb is not None else lambda a,b,c,d: None 
 
         u,v,p,uh,vh = self.u, self.v, self.p, self._x[0], self._x[1]
@@ -124,96 +131,3 @@ class NavierStokesFDM(Fluid):
 
         np.copyto(self.u, u)
         np.copyto(self.v, v)
-
-class Boundary: 
-    MIN = 0
-    MAX = -1
-    
-    def __init__(self, v, dim, end, delta=None):
-        self.v = v
-        self.dim = dim
-        self.end = end
-        self.delta = delta 
-    
-    def apply(self, arr): pass
-
-def get_slice_indexer(arr, dim, ind):
-    ii = [ slice(None) ] * arr.ndim
-    ii[dim] = ind
-    return tuple(ii)
-
-class DirichletBoundary(Boundary):
-    def apply(self, arr):
-        idx = get_slice_indexer(arr, self.dim, self.end)
-        arr[idx] = self.v
-
-class NeumannBoundary(Boundary):
-    def apply(self, arr):
-        if self.end == Boundary.MAX:
-            idx = get_slice_indexer(arr, self.dim, -1)
-            idx_n = get_slice_indexer(arr, self.dim, -2)       
-        elif self.end == Boundary.MIN:
-            idx = get_slice_indexer(arr, self.dim, 0)
-            idx_n = get_slice_indexer(arr, self.dim, 1)
-
-        arr[idx] = arr[idx_n] - self.v * self.delta
-
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-
-def plot(fluid, fig=None):
-    x,y = fluid.space.coords
-
-    vel =np.sqrt(fluid.u**2 + fluid.v**2)
-    plt.contourf(x,y,fluid.p,cmap='magma')
-    plt.colorbar()
-    #plt.quiver(fluid.u,fluid.v,color='k')
-
-    plt.streamplot(x,y,fluid.u, fluid.v)
-    plt.xlim(x[0,0], x[-1,-1])
-    plt.ylim(y[0,0], y[-1,-1])
-    plt.show()
-
-def cavity_flow():
-    space = Space([101,101], [1,1])
-    fluid = NavierStokesFDM(space, rho=1, nu=0.05)
-    dx = space.delta[0]
-    u_lid = 1.0 
-    cfl_dt = min(0.25*dx*dx/fluid.nu, 4.0*fluid.nu/u_lid/u_lid)
-
-    fluid.add_boundary_conditions('u', [
-        DirichletBoundary(dim=0, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=0, v=u_lid, end=Boundary.MAX), # lid driven 
-        DirichletBoundary(dim=1, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=1, v=0, end=Boundary.MAX),
-    ])
-
-    fluid.add_boundary_conditions('v', [
-        DirichletBoundary(dim=0, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=0, v=0, end=Boundary.MAX),
-        DirichletBoundary(dim=1, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=1, v=0, end=Boundary.MAX)
-    ])
-
-    fluid.add_boundary_conditions('p', [
-        NeumannBoundary(dim=1, v=0, end=Boundary.MAX, delta=space.delta[1]),
-        NeumannBoundary(dim=0, v=0, end=Boundary.MIN, delta=space.delta[0]),
-        NeumannBoundary(dim=1, v=0, end=Boundary.MIN, delta=space.delta[1]),
-        DirichletBoundary(dim=0, v=0, end=Boundary.MAX, delta=space.delta[0])
-    ])
-    
-    def debug(i, u, v, p):
-        pass
-
-    fluid.solve(dt=cfl_dt, its=700, p_tol=1e-3, p_max_its=50, cb=debug)
-    
-    fig, ax = plt.subplots()
-    plot(fluid, fig)
-    plt.show()#, cb=lambda: plot(fluid,fig))
-
-if __name__ == "__main__": 
-    cavity_flow()
-    #membrane()
-    
-    
-    
