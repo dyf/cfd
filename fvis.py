@@ -4,7 +4,7 @@ import matplotlib.cm as cm
 
 
 def streamplot(fluid, fig=None):
-    x,y = fluid.space.coords
+    x,y = fluid.space.grid_coords
 
     vel = np.sqrt(fluid.u**2 + fluid.v**2)
     plt.contourf(x,y,fluid.p,cmap='magma')

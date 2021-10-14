@@ -44,13 +44,33 @@ def pressure_poisson(p, dx, dy, b, tol, max_its, cb=None):
         
     return p, err
 
-class Space:
+class Space: pass
+
+class RegularGrid(Space):
     def __init__(self, N, extent):
+        super().__init__()
+
         self.N = np.array(N)
         self.extent = np.array(extent)
         self.delta = self.extent / (self.N - 1)
-        self.coords = np.meshgrid(*[ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)])
+        self.coords = [ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)]
+        self.grid_coords = np.meshgrid(*self.coords)
 
+class StaggeredGrid(Space):
+    def __init__(self, N, extent):
+        super().__init__()
+
+        self.N = np.array(N)
+        self.extent = np.array(extent)
+        self.delta = self.extent / self.N
+        self.centered_coords = [ np.linspace(d/2.0,e-d/2.0,n,endpoint=True) for d,e,n in zip(self.delta, self.extent, self.N)]
+        self.staggered_coords = [ np.linspace(0,e,n+1,endpoint=True) for d,e,n in zip(self.delta, self.extent, self.N) ]
+        self.centered_grid_coords = np.meshgrid(*self.centered_coords)
+        # self.staggered_grid_coords = 
+        # x-staggered coordinates
+        #xu,yu = np.meshgrid(xxs, yy)
+        # y-staggered coordinates
+        #xv,yv = np.meshgrid(xx, yys)
 
 class Fluid:
     def __init__(self, space):
@@ -75,19 +95,17 @@ class Fluid:
     def solve(self, dt, cb=None, **kwargs):
         raise NotImplementedError
 
-
-class NavierStokesFDM(Fluid):
-    def __init__(self, space, rho, nu, f=None):
-        super().__init__(space)
-
-        self.space = space
+class NavierStokesProjectionMethod(Fluid):
+    def __init__(self, N, extent, rho, nu, f=None):
+        super().__init__(RegularGrid(N, extent))
+        
         self.rho = rho # density
-        self.nu = nu
+        self.nu = nu # viscosity
         self.f = np.zeros(2) if f is None else f
 
-        self.u = np.zeros(space.N)
-        self.v = np.zeros(space.N)
-        self.p = np.zeros(space.N)
+        self.u = np.zeros(self.space.N)
+        self.v = np.zeros(self.space.N)
+        self.p = np.zeros(self.space.N)
 
         self._x = [ np.zeros_like(self.p) for _ in range(3) ]
 
@@ -131,3 +149,23 @@ class NavierStokesFDM(Fluid):
 
         np.copyto(self.u, u)
         np.copyto(self.v, v)
+
+class NavierStokesFVM(Fluid):
+    def __init__(self, N, extent, nu, beta):
+        super().__init__(space=StaggeredGrid(N, extent))
+
+        self.nu = nu
+        self.beta = beta
+
+        # initialize velocities - we stagger everything in the negative direction. A scalar cell owns its minus face, only.
+        # Then, for example, the u velocity field has a ghost cell at x0 - dx and the plus ghost cell at lx
+        self.u = np.zeros(self.space.N+2) # include ghost cells
+
+        # # same thing for the y-velocity component
+        self.v = np.zeros(self.space.N+2) # include ghost cells
+
+        self.ut = np.zeros_like(self.u)
+        self.vt = np.zeros_like(self.v)    
+
+        # initialize the pressure
+        self.p = np.zeros(self.space.N+2) # include ghost cells
