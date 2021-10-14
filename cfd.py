@@ -1,47 +1,48 @@
 import numpy as np
 from collections import defaultdict
 
-def pressure_poisson_2d_step(p, u, v, rho, dt, dx, dy, pout, b=None):
-    if b is None:
-        b = np.zeros_like(p)
+def ddx(f, dx):
+    result = np.zeros_like(f)
+    result[1:-1,1:-1] = (f[1:-1,2:] - f[1:-1,:-2])/2.0/dx
+    return result
 
-    b[1:-1,1:-1] = (rho * (1 / dt * 
-                    ((u[1:-1, 2:] - u[1:-1, 0:-2]) / 
-                     (2 * dx) + (v[2:, 1:-1] - v[0:-2, 1:-1]) / (2 * dy)) -
-                    ((u[1:-1, 2:] - u[1:-1, 0:-2]) / (2 * dx))**2 -
-                      2 * ((u[2:, 1:-1] - u[0:-2, 1:-1]) / (2 * dy) *
-                           (v[1:-1, 2:] - v[1:-1, 0:-2]) / (2 * dx))-
-                          ((v[2:, 1:-1] - v[0:-2, 1:-1]) / (2 * dy))**2))
+def ddy(f, dy):
+    result = np.zeros_like(f)
+    result[1:-1,1:-1] = (f[2:,1:-1] - f[:-2,1:-1])/2.0/dy
+    return result
+    
+def laplacian(f, dx, dy):
+    result = np.zeros_like(f)
+    result[1:-1,1:-1] = (f[1:-1,2:] - 2.0*f[1:-1,1:-1] + f[1:-1,:-2])/dx/dx \
+                      + (f[2:,1:-1] -2.0*f[1:-1,1:-1] + f[:-2,1:-1])/dy/dy
+    return result
 
-    pout[1:-1,1:-1] = (((p[1:-1, 2:] + p[1:-1, 0:-2]) * dy**2 + 
-                (p[2:, 1:-1] + p[0:-2, 1:-1]) * dx**2) /
-                (2 * (dx**2 + dy**2)) -
-                dx**2 * dy**2 / (2 * (dx**2 + dy**2)) * b[1:-1,1:-1])
+def div(u,v,dx,dy):
+    return ddx(u,dx) + ddy(v,dy)
 
-def momentum_2d_step(u, v, p, rho, nu, f, dt, dx, dy, uout, vout):
-    uout[1:-1, 1:-1] = (u[1:-1, 1:-1] -
-                         u[1:-1, 1:-1] * dt / dx *
-                        (u[1:-1, 1:-1] - u[1:-1, 0:-2]) -
-                         v[1:-1, 1:-1] * dt / dy *
-                        (u[1:-1, 1:-1] - u[0:-2, 1:-1]) -
-                         dt / (2 * rho * dx) * (p[1:-1, 2:] - p[1:-1, 0:-2]) +
-                         nu * (dt / dx**2 *
-                        (u[1:-1, 2:] - 2 * u[1:-1, 1:-1] + u[1:-1, 0:-2]) +
-                         dt / dy**2 *
-                        (u[2:, 1:-1] - 2 * u[1:-1, 1:-1] + u[0:-2, 1:-1])) +
-                        f[0] * dt)
+def pressure_poisson(p, dx, dy, b, tol, max_its, cb=None):
+    cb = cb if cb is not None else lambda x: None
 
-    vout[1:-1,1:-1] = (v[1:-1, 1:-1] -
-                    u[1:-1, 1:-1] * dt / dx *
-                    (v[1:-1, 1:-1] - v[1:-1, 0:-2]) -
-                    v[1:-1, 1:-1] * dt / dy *
-                    (v[1:-1, 1:-1] - v[0:-2, 1:-1]) -
-                    dt / (2 * rho * dy) * (p[2:, 1:-1] - p[0:-2, 1:-1]) +
-                    nu * (dt / dx**2 *
-                    (v[1:-1, 2:] - 2 * v[1:-1, 1:-1] + v[1:-1, 0:-2]) +
-                    dt / dy**2 *
-                    (v[2:, 1:-1] - 2 * v[1:-1, 1:-1] + v[0:-2, 1:-1])) +
-                    f[1] * dt)
+    pn = p.copy()
+    it = 0
+    err = float("inf")
+    
+    while it < max_its and err > tol:
+        cb(p)
+
+        np.copyto(pn, p)
+            
+        p[1:-1, 1:-1] = (((pn[1:-1, 2:] + pn[1:-1, 0:-2]) * dy**2 + 
+                          (pn[2:, 1:-1] + pn[0:-2, 1:-1]) * dx**2) /
+                          (2 * (dx**2 + dy**2)) -
+                          dx**2 * dy**2 / (2 * (dx**2 + dy**2)) * 
+                          b[1:-1,1:-1])
+
+
+        err = np.linalg.norm(p - pn, 2)
+        it += 1
+        
+    return p, err
 
 class Space:
     def __init__(self, N, extent):
@@ -61,7 +62,7 @@ class Fluid:
         self.v = np.zeros(space.N)
         self.p = np.zeros(space.N)
 
-        self._x = [ np.zeros_like(self.p) for _ in range(2) ]
+        self._x = [ np.zeros_like(self.p) for _ in range(3) ]
 
         self.bcs = defaultdict(list)
 
@@ -71,51 +72,54 @@ class Fluid:
     def get_boundary_conditions(self, name):
         return self.bcs[name]
 
-    def solve(self, dt, its, p_tol, p_max_its, cb=None):
-        
-        for _ in range(its):
-            self.solve_pressure_poisson(dt, tol=p_tol, max_its=p_max_its)
-            self.solve_momentum(dt)
+    def get_boundary_conditions_fn(self, name):
+        bcs = self.get_boundary_conditions(name)
 
-            if cb:
-                cb()
-
-    def solve_pressure_poisson(self, dt, tol, max_its):
-        p, pn, b = self.p, self._x[0], self._x[1]
-
-        dx,dy = self.space.delta
-        u,v = self.u, self.v
-        bcs = self.get_boundary_conditions('p')
-
-        res = float("inf")
-
-        it = 0
-        while res > tol and it < max_its:
-            pressure_poisson_2d_step(p, u, v, self.rho, dt, dx, dy, pout=pn, b=b)
-
+        def x(arr):
             for bc in bcs:
-                bc.set_boundary(pn)
+                bc.apply(arr)
 
-            res = np.linalg.norm(p-pn)
+        return x      
 
-            np.copyto(p, pn)
-            it += 1
+    def solve(self, dt, its, p_tol, p_max_its, cb=None):
+        cb = cb if cb is not None else lambda a,b,c,d: None 
 
-    def solve_momentum(self, dt):
-        dx, dy = self.space.delta
-        u, un = self.u, self._x[0]
-        v, vn = self.v, self._x[1]
+        u,v,p,uh,vh = self.u, self.v, self.p, self._x[0], self._x[1]
+        dx,dy = self.space.delta
 
-        momentum_2d_step(u, v, self.p, self.rho, self.nu, self.f, dt, dx, dy, uout=un, vout=vn)
-        
-        for bc in self.get_boundary_conditions('u'):
-            bc.set_boundary(un)
+        apply_p_bcs = self.get_boundary_conditions_fn('p')
+        apply_u_bcs = self.get_boundary_conditions_fn('u')
+        apply_v_bcs = self.get_boundary_conditions_fn('v')
 
-        for bc in self.get_boundary_conditions('v'):
-            bc.set_boundary(vn)
+        for i in range(its):
+            
+            apply_u_bcs(u)
+            apply_v_bcs(v)
 
-        np.copyto(u, un)
-        np.copyto(v, vn)
+            # do the x-momentum RHS
+            # u rhs: - d(uu)/dx - d(vu)/dy + ν d2(u)
+            uRHS = - ddx(u*u,dx) - ddy(v*u,dy) + self.nu*laplacian(u,dx,dy)
+            # v rhs: - d(uv)/dx - d(vv)/dy + ν d2(v)
+            vRHS = - ddx(u*v,dx) - ddy(v*v,dy) + self.nu*laplacian(v,dx,dy)
+            
+            uh = u + dt*uRHS
+            vh = v + dt*vRHS
+            
+            # next compute the pressure RHS: prhs = div(un)/dt + div( [urhs, vrhs])
+            prhs = div(uh,vh,dx,dy)/dt
+            p,err = pressure_poisson(p, dx, dy, prhs,
+                                     tol=p_tol, max_its=p_max_its,
+                                     cb=apply_p_bcs)
+            
+            # finally compute the true velocities
+            # u_{n+1} = uh - dt*dpdx
+            u = uh - dt*ddx(p,dx)
+            v = vh - dt*ddy(p,dy)
+
+            cb(i, u, v, p)
+
+        np.copyto(self.u, u)
+        np.copyto(self.v, v)
 
 class Boundary: 
     MIN = 0
@@ -127,7 +131,7 @@ class Boundary:
         self.end = end
         self.delta = delta 
     
-    def set_boundary(self, arr): pass
+    def apply(self, arr): pass
 
 def get_slice_indexer(arr, dim, ind):
     ii = [ slice(None) ] * arr.ndim
@@ -135,12 +139,12 @@ def get_slice_indexer(arr, dim, ind):
     return tuple(ii)
 
 class DirichletBoundary(Boundary):
-    def set_boundary(self, arr):
+    def apply(self, arr):
         idx = get_slice_indexer(arr, self.dim, self.end)
         arr[idx] = self.v
 
 class NeumannBoundary(Boundary):
-    def set_boundary(self, arr):
+    def apply(self, arr):
         if self.end == Boundary.MAX:
             idx = get_slice_indexer(arr, self.dim, -1)
             idx_n = get_slice_indexer(arr, self.dim, -2)       
@@ -154,33 +158,28 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
 def plot(fluid, fig=None):
-    if fig:
-        plt.figure(fig.number)
-        plt.clf()
+    x,y = fluid.space.coords
 
-    X,Y = fluid.space.coords
-    u,v,p = fluid.u, fluid.v, fluid.p
-
-    plt.contourf(X, Y, p, alpha=0.5, cmap=cm.viridis)  
+    vel =np.sqrt(fluid.u**2 + fluid.v**2)
+    plt.contourf(x,y,fluid.p,cmap='magma')
     plt.colorbar()
+    #plt.quiver(fluid.u,fluid.v,color='k')
 
-    # plotting the pressure field outlines
-    # plt.contour(X, Y, p, cmap=cm.viridis)  
-
-    # plotting velocity field
-    plt.streamplot(X, Y, u, v) 
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    plt.xlim([0,2])
-    plt.ylim([0,2])
+    plt.streamplot(x,y,fluid.u, fluid.v)
+    plt.xlim(x[0,0], x[-1,-1])
+    plt.ylim(y[0,0], y[-1,-1])
+    plt.show()
 
 def cavity_flow():
-    space = Space([81,81], [2,2])
-    fluid = Fluid(space, rho=1, nu=.1)
+    space = Space([191,191], [1,1])
+    fluid = Fluid(space, rho=1, nu=0.05)
+    dx = space.delta[0]
+    u_lid = 1.0 
+    cfl_dt = min(0.25*dx*dx/fluid.nu, 4.0*fluid.nu/u_lid/u_lid)
 
     fluid.add_boundary_conditions('u', [
         DirichletBoundary(dim=0, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=0, v=1, end=Boundary.MAX), # lid driven 
+        DirichletBoundary(dim=0, v=u_lid, end=Boundary.MAX), # lid driven 
         DirichletBoundary(dim=1, v=0, end=Boundary.MIN),
         DirichletBoundary(dim=1, v=0, end=Boundary.MAX),
     ])
@@ -199,44 +198,18 @@ def cavity_flow():
         DirichletBoundary(dim=0, v=0, end=Boundary.MAX, delta=space.delta[0])
     ])
     
-    fluid.solve(dt=0.001, its=700, p_tol=5e-2, p_max_its=100)
+    def debug(i, u, v, p):
+        pass
+
+    fluid.solve(dt=cfl_dt, its=700, p_tol=1e-3, p_max_its=50, cb=debug)
     
     fig, ax = plt.subplots()
     plot(fluid, fig)
     plt.show()#, cb=lambda: plot(fluid,fig))
 
-def membrane():
-    space = Space([81,81], [2,2])
-    fluid = Fluid(space, rho=1, nu=.1)
-
-    fluid.add_boundary_conditions('u', [
-        DirichletBoundary(dim=0, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=0, v=1, end=Boundary.MAX), # lid driven 
-        DirichletBoundary(dim=1, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=1, v=0, end=Boundary.MAX),
-    ])
-
-    fluid.add_boundary_conditions('v', [
-        DirichletBoundary(dim=0, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=0, v=0, end=Boundary.MAX),
-        DirichletBoundary(dim=1, v=0, end=Boundary.MIN),
-        DirichletBoundary(dim=1, v=0, end=Boundary.MAX)
-    ])
-
-    fluid.add_boundary_conditions('p', [
-        NeumannBoundary(dim=1, v=0, end=Boundary.MAX, delta=space.delta[1]),
-        NeumannBoundary(dim=0, v=0, end=Boundary.MIN, delta=space.delta[0]),
-        NeumannBoundary(dim=1, v=0, end=Boundary.MIN, delta=space.delta[1]),
-        DirichletBoundary(dim=0, v=0, end=Boundary.MAX, delta=space.delta[0])
-    ])
-    
-    fluid.solve(dt=0.001, its=700, p_tol=5e-2, p_max_its=100)
-    
-    fig, ax = plt.subplots()
-    plot(fluid, fig)
-    plt.show()#, cb=lambda: plot(fluid,fig))
-
-if __name__ == "__main__": cavity_flow()
+if __name__ == "__main__": 
+    cavity_flow()
+    #membrane()
     
     
     
