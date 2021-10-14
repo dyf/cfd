@@ -52,18 +52,8 @@ class Space:
         self.coords = np.meshgrid(*[ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)])
 
 class Fluid:
-    def __init__(self, space, rho, nu, f=None):
+    def __init__(self, space):
         self.space = space
-        self.rho = rho # density
-        self.nu = nu
-        self.f = np.zeros(2) if f is None else f
-
-        self.u = np.zeros(space.N)
-        self.v = np.zeros(space.N)
-        self.p = np.zeros(space.N)
-
-        self._x = [ np.zeros_like(self.p) for _ in range(3) ]
-
         self.bcs = defaultdict(list)
 
     def add_boundary_conditions(self, name, bcs):
@@ -79,8 +69,22 @@ class Fluid:
             for bc in bcs:
                 bc.apply(arr)
 
-        return x      
+        return x 
 
+class NavierStokesFDM(Fluid):
+    def __init__(self, space, rho, nu, f=None):
+        super().__init__(space)
+
+        self.rho = rho # density
+        self.nu = nu
+        self.f = np.zeros(2) if f is None else f
+
+        self.u = np.zeros(space.N)
+        self.v = np.zeros(space.N)
+        self.p = np.zeros(space.N)
+
+        self._x = [ np.zeros_like(self.p) for _ in range(3) ]
+         
     def solve(self, dt, its, p_tol, p_max_its, cb=None):
         cb = cb if cb is not None else lambda a,b,c,d: None 
 
@@ -171,8 +175,8 @@ def plot(fluid, fig=None):
     plt.show()
 
 def cavity_flow():
-    space = Space([191,191], [1,1])
-    fluid = Fluid(space, rho=1, nu=0.05)
+    space = Space([101,101], [1,1])
+    fluid = NavierStokesFDM(space, rho=1, nu=0.05)
     dx = space.delta[0]
     u_lid = 1.0 
     cfl_dt = min(0.25*dx*dx/fluid.nu, 4.0*fluid.nu/u_lid/u_lid)
