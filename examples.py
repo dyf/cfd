@@ -1,5 +1,6 @@
 import cfd
 import fvis
+import bc
 
 def cavity_flow():
     space = cfd.Space([91,91], [1,1])
@@ -9,24 +10,24 @@ def cavity_flow():
     cfl_dt = min(0.25*dx*dx/fluid.nu, 4.0*fluid.nu/u_lid/u_lid)
 
     fluid.add_boundary_conditions('u', [
-        cfd.DirichletBoundary(dim=0, v=0, end=cfd.Boundary.MIN),
-        cfd.DirichletBoundary(dim=0, v=u_lid, end=cfd.Boundary.MAX), # lid driven 
-        cfd.DirichletBoundary(dim=1, v=0, end=cfd.Boundary.MIN),
-        cfd.DirichletBoundary(dim=1, v=0, end=cfd.Boundary.MAX),
+        bc.DirichletBoundary(dim=0, v=0, end=bc.Boundary.MIN),
+        bc.DirichletBoundary(dim=0, v=u_lid, end=bc.Boundary.MAX), # lid driven 
+        bc.DirichletBoundary(dim=1, v=0, end=bc.Boundary.MIN),
+        bc.DirichletBoundary(dim=1, v=0, end=bc.Boundary.MAX),
     ])
 
     fluid.add_boundary_conditions('v', [
-        cfd.DirichletBoundary(dim=0, v=0, end=cfd.Boundary.MIN),
-        cfd.DirichletBoundary(dim=0, v=0, end=cfd.Boundary.MAX),
-        cfd.DirichletBoundary(dim=1, v=0, end=cfd.Boundary.MIN),
-        cfd.DirichletBoundary(dim=1, v=0, end=cfd.Boundary.MAX)
+        bc.DirichletBoundary(dim=0, v=0, end=bc.Boundary.MIN),
+        bc.DirichletBoundary(dim=0, v=0, end=bc.Boundary.MAX),
+        bc.DirichletBoundary(dim=1, v=0, end=bc.Boundary.MIN),
+        bc.DirichletBoundary(dim=1, v=0, end=bc.Boundary.MAX)
     ])
 
     fluid.add_boundary_conditions('p', [
-        cfd.NoSlipBoundary(dim=1, end=cfd.Boundary.MAX),
-        cfd.NoSlipBoundary(dim=0, end=cfd.Boundary.MIN),
-        cfd.NoSlipBoundary(dim=1, end=cfd.Boundary.MIN),
-        cfd.DirichletBoundary(dim=0, v=0, end=cfd.Boundary.MAX, delta=space.delta[0])
+        bc.NoSlipBoundary(dim=1, end=bc.Boundary.MAX),
+        bc.NoSlipBoundary(dim=0, end=bc.Boundary.MIN),
+        bc.NoSlipBoundary(dim=1, end=bc.Boundary.MIN),
+        bc.DirichletBoundary(dim=0, v=0, end=bc.Boundary.MAX, delta=space.delta[0])
     ])
     
     def debug(i, u, v, p):
