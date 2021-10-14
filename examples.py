@@ -3,7 +3,7 @@ import fvis
 
 def cavity_flow():
     space = cfd.Space([91,91], [1,1])
-    fluid = cfd.Fluid(space, rho=1, nu=0.05)
+    fluid = cfd.NavierStokesFDM(space, rho=1, nu=0.05)
     dx = space.delta[0]
     u_lid = 1.0 
     cfl_dt = min(0.25*dx*dx/fluid.nu, 4.0*fluid.nu/u_lid/u_lid)
@@ -23,9 +23,9 @@ def cavity_flow():
     ])
 
     fluid.add_boundary_conditions('p', [
-        cfd.NeumannBoundary(dim=1, v=0, end=cfd.Boundary.MAX, delta=space.delta[1]),
-        cfd.NeumannBoundary(dim=0, v=0, end=cfd.Boundary.MIN, delta=space.delta[0]),
-        cfd.NeumannBoundary(dim=1, v=0, end=cfd.Boundary.MIN, delta=space.delta[1]),
+        cfd.NoSlipBoundary(dim=1, end=cfd.Boundary.MAX),
+        cfd.NoSlipBoundary(dim=0, end=cfd.Boundary.MIN),
+        cfd.NoSlipBoundary(dim=1, end=cfd.Boundary.MIN),
         cfd.DirichletBoundary(dim=0, v=0, end=cfd.Boundary.MAX, delta=space.delta[0])
     ])
     

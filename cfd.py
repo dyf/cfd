@@ -51,19 +51,10 @@ class Space:
         self.delta = self.extent / (self.N - 1)
         self.coords = np.meshgrid(*[ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)])
 
+
 class Fluid:
-    def __init__(self, space, rho, nu, f=None):
+    def __init__(self, space):
         self.space = space
-        self.rho = rho # density
-        self.nu = nu
-        self.f = np.zeros(2) if f is None else f
-
-        self.u = np.zeros(space.N)
-        self.v = np.zeros(space.N)
-        self.p = np.zeros(space.N)
-
-        self._x = [ np.zeros_like(self.p) for _ in range(3) ]
-
         self.bcs = defaultdict(list)
 
     def add_boundary_conditions(self, name, bcs):
@@ -79,9 +70,29 @@ class Fluid:
             for bc in bcs:
                 bc.apply(arr)
 
-        return x      
+        return x   
 
-    def solve(self, dt, its, p_tol, p_max_its, cb=None):
+    def solve(self, dt, cb=None, **kwargs):
+        raise NotImplementedError
+
+
+class NavierStokesFDM(Fluid):
+    def __init__(self, space, rho, nu, f=None):
+        super().__init__(space)
+
+        self.space = space
+        self.rho = rho # density
+        self.nu = nu
+        self.f = np.zeros(2) if f is None else f
+
+        self.u = np.zeros(space.N)
+        self.v = np.zeros(space.N)
+        self.p = np.zeros(space.N)
+
+        self._x = [ np.zeros_like(self.p) for _ in range(3) ]
+
+
+    def solve(self, dt, cb=None, its=100, p_tol=1e-3, p_max_its=50):
         cb = cb if cb is not None else lambda a,b,c,d: None 
 
         u,v,p,uh,vh = self.u, self.v, self.p, self._x[0], self._x[1]
@@ -125,7 +136,7 @@ class Boundary:
     MIN = 0
     MAX = -1
     
-    def __init__(self, v, dim, end, delta=None):
+    def __init__(self, dim, end, v=None, delta=None):
         self.v = v
         self.dim = dim
         self.end = end
@@ -153,4 +164,15 @@ class NeumannBoundary(Boundary):
             idx_n = get_slice_indexer(arr, self.dim, 1)
 
         arr[idx] = arr[idx_n] - self.v * self.delta
+
+class NoSlipBoundary(Boundary):
+    def apply(self, arr):
+        if self.end == Boundary.MAX:
+            idx = get_slice_indexer(arr, self.dim, -1)
+            idx_n = get_slice_indexer(arr, self.dim, -2)       
+        elif self.end == Boundary.MIN:
+            idx = get_slice_indexer(arr, self.dim, 0)
+            idx_n = get_slice_indexer(arr, self.dim, 1)
+
+        arr[idx] = arr[idx_n]
 
