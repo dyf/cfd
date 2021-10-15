@@ -107,3 +107,7 @@ def get_staggered_indexers(dim, ndims, boundary, stagger_dir, stagger_dim):
                 i_in[dim] = -2
 
     return tuple(i_wall), tuple(i_in)
+
+if __name__ == "__main__":
+    iw,ii = get_staggered_indexers(0,2,Boundary.MIN,stagger_dir=Stagger.NEGATIVE, stagger_dim=0)
+    print(iw)
