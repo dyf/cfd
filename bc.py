@@ -1,43 +1,40 @@
 class Boundary: 
     MIN = 0
-    MAX = -1
+    MAX = 1
+
+    CENTER = None    
+    NEGATIVE = 0
+    POSITIVE = 1
     
-    def __init__(self, dim, end, v=None, delta=None):
+    def __init__(self, dim, ndims, end, v=None, delta=None, stagger=None):
         self.v = v
-        self.dim = dim
-        self.end = end
-        self.delta = delta 
+        self.delta = delta
+        
+        if end == Boundary.MAX:
+            i0, i1 = -1, -2            
+        elif end == Boundary.MIN:
+            i0, i1 = 0, 1
+        else:
+            raise Exception("unknown boundary position")
+        
+        self.idx0 = get_slice_indexer(dim,ndims,i0)
+        self.idx1 = get_slice_indexer(dim,ndims,i1)
     
     def apply(self, arr): pass
 
-def get_slice_indexer(arr, dim, ind):
-    ii = [ slice(None) ] * arr.ndim
-    ii[dim] = ind
-    return tuple(ii)
-
 class DirichletBoundary(Boundary):
     def apply(self, arr):
-        idx = get_slice_indexer(arr, self.dim, self.end)
-        arr[idx] = self.v
+        arr[self.idx0] = self.v
 
 class NeumannBoundary(Boundary):
     def apply(self, arr):
-        if self.end == Boundary.MAX:
-            idx = get_slice_indexer(arr, self.dim, -1)
-            idx_n = get_slice_indexer(arr, self.dim, -2)       
-        elif self.end == Boundary.MIN:
-            idx = get_slice_indexer(arr, self.dim, 0)
-            idx_n = get_slice_indexer(arr, self.dim, 1)
-
-        arr[idx] = arr[idx_n] - self.v * self.delta
+        arr[self.idx0] = arr[self.idx1] - self.v * self.delta
 
 class NoSlipBoundary(Boundary):
     def apply(self, arr):
-        if self.end == Boundary.MAX:
-            idx = get_slice_indexer(arr, self.dim, -1)
-            idx_n = get_slice_indexer(arr, self.dim, -2)       
-        elif self.end == Boundary.MIN:
-            idx = get_slice_indexer(arr, self.dim, 0)
-            idx_n = get_slice_indexer(arr, self.dim, 1)
+        arr[self.idx0] = arr[self.idx1]
 
-        arr[idx] = arr[idx_n]
+def get_slice_indexer(dim, ndims, ind):
+    ii = [ slice(None) ] * ndims
+    ii[dim] = ind
+    return tuple(ii)

@@ -169,3 +169,6 @@ class NavierStokesFVM(Fluid):
 
         # initialize the pressure
         self.p = np.zeros(self.space.N+2) # include ghost cells
+
+    def solve(self, dt, cb=None, its=100):
+        pass

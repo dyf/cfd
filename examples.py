@@ -9,24 +9,24 @@ def cavity_flow():
     cfl_dt = min(0.25*dx*dx/fluid.nu, 4.0*fluid.nu/u_lid/u_lid)
 
     fluid.add_boundary_conditions('u', [
-        bc.DirichletBoundary(dim=0, v=0, end=bc.Boundary.MIN),
-        bc.DirichletBoundary(dim=0, v=u_lid, end=bc.Boundary.MAX), # lid driven 
-        bc.DirichletBoundary(dim=1, v=0, end=bc.Boundary.MIN),
-        bc.DirichletBoundary(dim=1, v=0, end=bc.Boundary.MAX),
+        bc.DirichletBoundary(dim=0, ndims=2, v=0, end=bc.Boundary.MIN),
+        bc.DirichletBoundary(dim=0, ndims=2, v=u_lid, end=bc.Boundary.MAX), # lid driven 
+        bc.DirichletBoundary(dim=1, ndims=2, v=0, end=bc.Boundary.MIN),
+        bc.DirichletBoundary(dim=1, ndims=2, v=0, end=bc.Boundary.MAX),
     ])
 
     fluid.add_boundary_conditions('v', [
-        bc.DirichletBoundary(dim=0, v=0, end=bc.Boundary.MIN),
-        bc.DirichletBoundary(dim=0, v=0, end=bc.Boundary.MAX),
-        bc.DirichletBoundary(dim=1, v=0, end=bc.Boundary.MIN),
-        bc.DirichletBoundary(dim=1, v=0, end=bc.Boundary.MAX)
+        bc.DirichletBoundary(dim=0, ndims=2, v=0, end=bc.Boundary.MIN),
+        bc.DirichletBoundary(dim=0, ndims=2, v=0, end=bc.Boundary.MAX),
+        bc.DirichletBoundary(dim=1, ndims=2, v=0, end=bc.Boundary.MIN),
+        bc.DirichletBoundary(dim=1, ndims=2, v=0, end=bc.Boundary.MAX)
     ])
 
     fluid.add_boundary_conditions('p', [
-        bc.NoSlipBoundary(dim=1, end=bc.Boundary.MAX),
-        bc.NoSlipBoundary(dim=0, end=bc.Boundary.MIN),
-        bc.NoSlipBoundary(dim=1, end=bc.Boundary.MIN),
-        bc.DirichletBoundary(dim=0, v=0, end=bc.Boundary.MAX)
+        bc.NoSlipBoundary(dim=1, ndims=2, end=bc.Boundary.MAX),
+        bc.NoSlipBoundary(dim=0, ndims=2, end=bc.Boundary.MIN),
+        bc.NoSlipBoundary(dim=1, ndims=2, end=bc.Boundary.MIN),
+        bc.DirichletBoundary(dim=0, ndims=2, v=0, end=bc.Boundary.MAX)
     ])
     
     def debug(i, u, v, p):
@@ -42,8 +42,8 @@ def cavity_flow_fvm():
 
 
 if __name__ == "__main__": 
-    #cavity_flow()
-    cavity_flow_fvm()
+    cavity_flow()
+    #cavity_flow_fvm()
     #membrane()
     
     
