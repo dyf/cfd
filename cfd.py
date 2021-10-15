@@ -116,7 +116,7 @@ class NavierStokesProjectionMethod(Fluid):
         cb = cb if cb is not None else lambda a,b,c,d: None 
 
         u,v,p,uh,vh = self.u, self.v, self.p, self._x[0], self._x[1]
-        dx,dy = self.space.delta
+        dx,dy = self.space.delta 
 
         apply_p_bcs = self.get_boundary_conditions_fn('p')
         apply_u_bcs = self.get_boundary_conditions_fn('u')

@@ -9,24 +9,24 @@ def cavity_flow():
     cfl_dt = min(0.25*dx*dx/fluid.nu, 4.0*fluid.nu/u_lid/u_lid)
 
     fluid.add_boundary_conditions('u', [
-        dict(type=bc.Dirichlet, dim=0, v=0, end=bc.Boundary.MIN),
-        dict(type=bc.Dirichlet, dim=0, v=u_lid, end=bc.Boundary.MAX), # lid driven 
-        dict(type=bc.Dirichlet, dim=1, v=0, end=bc.Boundary.MIN),
-        dict(type=bc.Dirichlet, dim=1, v=0, end=bc.Boundary.MAX),
+        dict(type=bc.Dirichlet, dim=0, v=0, b=bc.Boundary.MIN),
+        dict(type=bc.Dirichlet, dim=0, v=u_lid, b=bc.Boundary.MAX), # lid driven 
+        dict(type=bc.Dirichlet, dim=1, v=0, b=bc.Boundary.MIN),
+        dict(type=bc.Dirichlet, dim=1, v=0, b=bc.Boundary.MAX),
     ])
 
     fluid.add_boundary_conditions('v', [
-        dict(type=bc.Dirichlet, dim=0, v=0, end=bc.Boundary.MIN),
-        dict(type=bc.Dirichlet, dim=0, v=0, end=bc.Boundary.MAX),
-        dict(type=bc.Dirichlet, dim=1, v=0, end=bc.Boundary.MIN),
-        dict(type=bc.Dirichlet, dim=1, v=0, end=bc.Boundary.MAX)
+        dict(type=bc.Dirichlet, dim=0, v=0, b=bc.Boundary.MIN),
+        dict(type=bc.Dirichlet, dim=0, v=0, b=bc.Boundary.MAX),
+        dict(type=bc.Dirichlet, dim=1, v=0, b=bc.Boundary.MIN),
+        dict(type=bc.Dirichlet, dim=1, v=0, b=bc.Boundary.MAX)
     ])
 
     fluid.add_boundary_conditions('p', [
-        dict(type=bc.NoSlip, dim=1, end=bc.Boundary.MAX),
-        dict(type=bc.NoSlip, dim=0, end=bc.Boundary.MIN),
-        dict(type=bc.NoSlip, dim=1, end=bc.Boundary.MIN),
-        dict(type=bc.Dirichlet, dim=0, v=0, end=bc.Boundary.MAX)
+        dict(type=bc.NoSlip, dim=1, b=bc.Boundary.MAX),
+        dict(type=bc.NoSlip, dim=0, b=bc.Boundary.MIN),
+        dict(type=bc.NoSlip, dim=1, b=bc.Boundary.MIN),
+        dict(type=bc.Dirichlet, dim=0, v=0, b=bc.Boundary.MAX)
     ])
     
     def debug(i, u, v, p):
