@@ -78,7 +78,9 @@ class Fluid:
         self.bcs = defaultdict(list)
 
     def add_boundary_conditions(self, name, bcs):
-        self.bcs[name] += bcs
+        for bc in bcs:
+            bctype = bc.pop('type')
+            self.bcs[name].append(bctype(ndims=len(self.space.N),**bc))
 
     def get_boundary_conditions(self, name):
         return self.bcs[name]

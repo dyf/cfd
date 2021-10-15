@@ -9,24 +9,24 @@ def cavity_flow():
     cfl_dt = min(0.25*dx*dx/fluid.nu, 4.0*fluid.nu/u_lid/u_lid)
 
     fluid.add_boundary_conditions('u', [
-        bc.DirichletBoundary(dim=0, ndims=2, v=0, end=bc.Boundary.MIN),
-        bc.DirichletBoundary(dim=0, ndims=2, v=u_lid, end=bc.Boundary.MAX), # lid driven 
-        bc.DirichletBoundary(dim=1, ndims=2, v=0, end=bc.Boundary.MIN),
-        bc.DirichletBoundary(dim=1, ndims=2, v=0, end=bc.Boundary.MAX),
+        dict(type=bc.Dirichlet, dim=0, v=0, end=bc.Boundary.MIN),
+        dict(type=bc.Dirichlet, dim=0, v=u_lid, end=bc.Boundary.MAX), # lid driven 
+        dict(type=bc.Dirichlet, dim=1, v=0, end=bc.Boundary.MIN),
+        dict(type=bc.Dirichlet, dim=1, v=0, end=bc.Boundary.MAX),
     ])
 
     fluid.add_boundary_conditions('v', [
-        bc.DirichletBoundary(dim=0, ndims=2, v=0, end=bc.Boundary.MIN),
-        bc.DirichletBoundary(dim=0, ndims=2, v=0, end=bc.Boundary.MAX),
-        bc.DirichletBoundary(dim=1, ndims=2, v=0, end=bc.Boundary.MIN),
-        bc.DirichletBoundary(dim=1, ndims=2, v=0, end=bc.Boundary.MAX)
+        dict(type=bc.Dirichlet, dim=0, v=0, end=bc.Boundary.MIN),
+        dict(type=bc.Dirichlet, dim=0, v=0, end=bc.Boundary.MAX),
+        dict(type=bc.Dirichlet, dim=1, v=0, end=bc.Boundary.MIN),
+        dict(type=bc.Dirichlet, dim=1, v=0, end=bc.Boundary.MAX)
     ])
 
     fluid.add_boundary_conditions('p', [
-        bc.NoSlipBoundary(dim=1, ndims=2, end=bc.Boundary.MAX),
-        bc.NoSlipBoundary(dim=0, ndims=2, end=bc.Boundary.MIN),
-        bc.NoSlipBoundary(dim=1, ndims=2, end=bc.Boundary.MIN),
-        bc.DirichletBoundary(dim=0, ndims=2, v=0, end=bc.Boundary.MAX)
+        dict(type=bc.NoSlip, dim=1, end=bc.Boundary.MAX),
+        dict(type=bc.NoSlip, dim=0, end=bc.Boundary.MIN),
+        dict(type=bc.NoSlip, dim=1, end=bc.Boundary.MIN),
+        dict(type=bc.Dirichlet, dim=0, v=0, end=bc.Boundary.MAX)
     ])
     
     def debug(i, u, v, p):
@@ -38,7 +38,13 @@ def cavity_flow():
 
 def cavity_flow_fvm():
     fluid = cfd.NavierStokesFVM(N=[7,7],extent=[1,1],nu=0.01,beta=1.1)
-    print(fluid.space.centered_coords)
+    
+    fluid.add_boundary_conditions('u', [
+        bc.Dirichlet(dim=0, ndims=2, v=0, end=bc.Boundary.MIN, stagger=bc.Boundary.NEGATIVE),
+        bc.Dirichlet(dim=0, ndims=2, v=u_lid, end=bc.Boundary.MAX, stagger=bc.Boundary.NEGATIVE),
+        bc.Dirichlet(dim=1, ndims=2, v=0, end=bc.Boundary.MIN, stagger=bc.Boundary.NEGATIVE),
+        bc.Dirichlet(dim=1, ndims=2, v=0, end=bc.Boundary.MAX, stagger=bc.Boundary.NEGATIVE),
+    ])
 
 
 if __name__ == "__main__": 
