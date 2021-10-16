@@ -1,5 +1,6 @@
 import numpy as np
 from collections import defaultdict
+import space
 
 def ddx(f, dx):
     result = np.zeros_like(f)
@@ -44,34 +45,6 @@ def pressure_poisson(p, dx, dy, b, tol, max_its, cb=None):
         
     return p, err
 
-class Space: pass
-
-class RegularGrid(Space):
-    def __init__(self, N, extent):
-        super().__init__()
-
-        self.N = np.array(N)
-        self.extent = np.array(extent)
-        self.delta = self.extent / (self.N - 1)
-        self.coords = [ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)]
-        self.grid_coords = np.meshgrid(*self.coords)
-
-class StaggeredGrid(Space):
-    def __init__(self, N, extent):
-        super().__init__()
-
-        self.N = np.array(N)
-        self.extent = np.array(extent)
-        self.delta = self.extent / self.N
-        self.centered_coords = [ np.linspace(d/2.0,e-d/2.0,n,endpoint=True) for d,e,n in zip(self.delta, self.extent, self.N)]
-        self.staggered_coords = [ np.linspace(0,e,n+1,endpoint=True) for d,e,n in zip(self.delta, self.extent, self.N) ]
-        self.centered_grid_coords = np.meshgrid(*self.centered_coords)
-        # self.staggered_grid_coords = 
-        # x-staggered coordinates
-        #xu,yu = np.meshgrid(xxs, yy)
-        # y-staggered coordinates
-        #xv,yv = np.meshgrid(xx, yys)
-
 class Fluid:
     def __init__(self, space):
         self.space = space
@@ -80,7 +53,7 @@ class Fluid:
     def add_boundary_conditions(self, name, bcs):
         for bc in bcs:
             bctype = bc.pop('type')
-            self.bcs[name].append(bctype(ndims=len(self.space.N),**bc))
+            self.bcs[name].append(bctype(space=self.space,**bc))
 
     def get_boundary_conditions(self, name):
         return self.bcs[name]
@@ -99,7 +72,7 @@ class Fluid:
 
 class NavierStokesProjectionMethod(Fluid):
     def __init__(self, N, extent, rho, nu, f=None):
-        super().__init__(RegularGrid(N, extent))
+        super().__init__(space=space.RegularGrid(N, extent))
         
         self.rho = rho # density
         self.nu = nu # viscosity
@@ -154,7 +127,7 @@ class NavierStokesProjectionMethod(Fluid):
 
 class NavierStokesFVM(Fluid):
     def __init__(self, N, extent, nu, beta):
-        super().__init__(space=StaggeredGrid(N, extent))
+        super().__init__(space=space.StaggeredGrid(N, extent))
 
         self.nu = nu
         self.beta = beta

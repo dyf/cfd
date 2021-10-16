@@ -1,13 +1,48 @@
 from enum import Enum
+import space
 
 class Boundary(Enum):
     MIN = 0
     MAX = 1
 
-class Stagger(Enum):
-    NEGATIVE = 0
-    POSITIVE = 1
+class BoundaryCondition: 
+    def __init__(self, dim, b, v=None, space=None):
+        self.v = v
+        self.space = space
+
+        if isinstance(space, space.StaggeredGrid):
+            self.i_wall, self.i_in = get_staggered_indexers()
+        else:
+            self.i_wall, self.i_in = get_indexers(dim,len(space.N),b)
+    
+    def apply(self, arr): 
+        pass
+
+class Dirichlet(BoundaryCondition):
+    def apply(self, arr):
+        arr[self.i_wall] = self.v
+
+class Neumann(BoundaryCondition):
+    def apply(self, arr):
+        arr[self.i_wall] = arr[self.i_in] - self.v * self.space.delta[self.dim]
+
+class NoSlip(BoundaryCondition):
+    def apply(self, arr):
+        arr[self.i_wall] = arr[self.i_in]
+
+def get_indexers(dim, ndims, boundary):
+    i_wall = [ slice(None) ] * ndims
+    i_in = [ slice(None) ] * ndims
+
+    if boundary == Boundary.MIN:
+        i_wall[dim] = 0
+        i_in[dim] = 1
+    elif boundary == boundary.MAX:
+        i_wall[dim] = -1
+        i_in[dim] = -2
         
+    return tuple(i_wall), tuple(i_in)
+
 """ 
 # u 
 #   - horizontal component of velocity (horizontal/left-right = dim 1)
@@ -40,40 +75,6 @@ v[1,1:-1] = Vb
 # top wall
 v[-1,1:-1] = Vt 
 """
-
-class BoundaryCondition: 
-    def __init__(self, dim, ndims, b, v=None, delta=None):
-        self.v = v
-        self.delta = delta
-
-        self.i_wall, self.i_in = get_indexers(dim,ndims,b)
-    
-    def apply(self, arr): pass
-
-class Dirichlet(BoundaryCondition):
-    def apply(self, arr):
-        arr[self.i_wall] = self.v
-
-class Neumann(BoundaryCondition):
-    def apply(self, arr):
-        arr[self.i_wall] = arr[self.i_in] - self.v * self.delta
-
-class NoSlip(BoundaryCondition):
-    def apply(self, arr):
-        arr[self.i_wall] = arr[self.i_in]
-
-def get_indexers(dim, ndims, boundary):
-    i_wall = [ slice(None) ] * ndims
-    i_in = [ slice(None) ] * ndims
-
-    if boundary == Boundary.MIN:
-        i_wall[dim] = 0
-        i_in[dim] = 1
-    elif boundary == boundary.MAX:
-        i_wall[dim] = -1
-        i_in[dim] = -2
-        
-    return tuple(i_wall), tuple(i_in)
 
 """
 if bdim = staggered dim 
