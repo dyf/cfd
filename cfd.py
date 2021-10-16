@@ -17,7 +17,7 @@ def laplacian(f, dx, dy):
 
 def div(u,v,dx,dy):
     return ddx(u,dx) + ddy(v,dy)
-    
+
 def momentum(u, v, dx, dy, nu):
     # u rhs: - d(uu)/dx - d(vu)/dy + ν d2(u)
     # v rhs: - d(uv)/dx - d(vv)/dy + ν d2(v)
@@ -87,6 +87,48 @@ def pressure_poisson(p, dx, dy, b, tol, max_its, cb=None):
         it += 1
         
     return p, err
+
+def sparse_pressure_matrix(nx, ny, dx, dy, v_left, v_right, v_top, v_bottom):
+    Ap = np.zeros([ny,nx])
+    Ae = 1.0/dx/dx*np.ones([ny,nx])
+    As = 1.0/dy/dy*np.ones([ny,nx])
+    An = 1.0/dy/dy*np.ones([ny,nx])
+    Aw = 1.0/dx/dx*np.ones([ny,nx])
+
+    # set left wall coefs
+    Aw[:,0] = v_left
+    # set right wall coefs
+    Ae[:,-1] = v_right
+    # set top wall coefs
+    An[-1,:] = v_top
+    # set bottom wall coefs
+    As[0,:] = v_bottom
+
+    Ap = -(Aw + Ae + An + As)
+
+    n = nx*ny
+    d0 = Ap.reshape(n)
+    de = Ae.reshape(n)[:-1]
+    dw = Aw.reshape(n)[1:]
+    ds = As.reshape(n)[nx:]
+    dn = An.reshape(n)[:-nx]
+    A1 = scipy.sparse.diags([d0, de, dw, dn, ds], [0, 1, -1, nx, -nx], format='csr')
+
+    return A1
+
+def pressure_poisson_sparse(A1, u, v, dx, dy, dt, nx, ny):
+    # do pressure - prhs = 1/dt * div(uhat)
+    # we will only need to fill the interior points. This size is for convenient indexing
+    divut = np.zeros([ny+2,nx+2]) 
+    #divut[1:-1,1:-1] = ddx(ut,dx) + ddy(vt,dy)#div(ut,vt,dx,dy)
+    divut[1:-1,1:-1] = (u[1:-1,2:] - u[1:-1,1:-1])/dx + (v[2:,1:-1] - v[1:-1,1:-1])/dy
+    
+    prhs = 1.0/dt * divut
+    
+    ###### Use the sparse linear solver
+    #     pt = scipy.sparse.linalg.spsolve(A1,prhs[1:-1,1:-1].ravel()) #theta=sc.linalg.solve_triangular(A,d)
+    pt,info = scipy.sparse.linalg.bicg(A1,prhs[1:-1,1:-1].ravel(),tol=1e-10) #theta=sc.linalg.solve_triangular(A,d)
+    return pt.reshape([ny,nx])
 
 class Fluid:
     def __init__(self, space):
@@ -199,28 +241,7 @@ class NavierStokesFVM(Fluid):
 
         u,v,ut,vt,p = self.u, self.v, self.ut, self.vt, self.p
 
-        Ap = np.zeros([ny,nx])
-        Ae = 1.0/dx/dx*np.ones([ny,nx])
-        As = 1.0/dy/dy*np.ones([ny,nx])
-        An = 1.0/dy/dy*np.ones([ny,nx])
-        Aw = 1.0/dx/dx*np.ones([ny,nx])
-        # set left wall coefs
-        Aw[:,0] = 0.0
-        # set right wall coefs
-        Ae[:,-1] = 0.0
-        # set top wall coefs
-        An[-1,:] = 0.0
-        # set bottom wall coefs
-        As[0,:] = 0.0
-        Ap = -(Aw + Ae + An + As)
-
-        n = nx*ny
-        d0 = Ap.reshape(n)
-        de = Ae.reshape(n)[:-1]
-        dw = Aw.reshape(n)[1:]
-        ds = As.reshape(n)[nx:]
-        dn = An.reshape(n)[:-nx]
-        A1 = scipy.sparse.diags([d0, de, dw, dn, ds], [0, 1, -1, nx, -nx], format='csr')
+        A1 = sparse_pressure_matrix(nx, ny, dx, dy, 0, 0, 0, 0)
 
         nsteps = 1000
         for n in range(0,nsteps):
@@ -247,20 +268,8 @@ class NavierStokesFVM(Fluid):
             ut[1:-1,2:-1] = u[1:-1,2:-1] + dt * mx
             vt[2:-1,1:-1] = v[2:-1,1:-1] + dt * my        
             
-            # do pressure - prhs = 1/dt * div(uhat)
-            # we will only need to fill the interior points. This size is for convenient indexing
-            divut = np.zeros([ny+2,nx+2]) 
-            #divut[1:-1,1:-1] = div(ut,vt,dx,dy)
-            divut[1:-1,1:-1] = (ut[1:-1,2:] - ut[1:-1,1:-1])/dx + (vt[2:,1:-1] - vt[1:-1,1:-1])/dy
-
-            prhs = 1.0/dt * divut
-            
-            ###### Use the sparse linear solver
-            
-            #     pt = scipy.sparse.linalg.spsolve(A1,prhs[1:-1,1:-1].ravel()) #theta=sc.linalg.solve_triangular(A,d)
-            pt,info = scipy.sparse.linalg.bicg(A1,prhs[1:-1,1:-1].ravel(),tol=1e-10) #theta=sc.linalg.solve_triangular(A,d)
-            p[:,:] = 0#np.zeros([ny+2,nx+2])
-            p[1:-1,1:-1] = pt.reshape([ny,nx])
+            p[:,:] = 0
+            p[1:-1,1:-1] = pressure_poisson_sparse(A1, ut, vt, dx, dy, dt, nx, ny)
 
             # time advance
             u[1:-1,2:-1] = ut[1:-1,2:-1] - dt * (p[1:-1,2:-1] - p[1:-1,1:-2])/dx
