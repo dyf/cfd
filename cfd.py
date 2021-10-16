@@ -202,46 +202,34 @@ class NavierStokesFVM(Fluid):
             # top wall
             v[-1,1:-1] = 0.0    
         
-
             # do x-momentum first - u is of size (nx + 2) x (ny + 2) - only need to do the interior points
-            for i in range(2,nx+1):
-                for j in range(1,ny+1):
-                    ue = 0.5*(u[j,i+1] + u[j,i])
-                    uw = 0.5*(u[j,i]   + u[j,i-1])    
-                    
-                    un = 0.5*(u[j+1,i] + u[j,i])
-                    us = 0.5*(u[j,i] + u[j-1,i])            
-                    
-                    vn = 0.5*(v[j+1,i] + v[j+1,i-1])
-                    vs = 0.5*(v[j,i] + v[j,i-1])
-                    
-                    # convection = - d(uu)/dx - d(vu)/dy
-                    convection = - (ue*ue - uw*uw)/dx - (un*vn - us*vs)/dy
-                    
-                    # diffusion = d2u/dx2 + d2u/dy2
-                    diffusion = self.nu*( (u[j,i+1] - 2.0*u[j,i] + u[j,i-1])/dx/dx + (u[j+1,i] - 2.0*u[j,i] + u[j-1,i])/dy/dy )
-                    
-                    ut[j,i] = u[j,i] + dt *(convection + diffusion)
+            # u is horizontonal component of velocity, dimension 1
+            # u[1,2] is the LL corner, u[n,n] is the UR corner
+
+            ue = 0.5*(u[1:-1, 2:-1] + u[1:-1, 3:  ])
+            uw = 0.5*(u[1:-1, 1:-2] + u[1:-1, 2:-1])
+            un = 0.5*(u[1:-1, 2:-1] + u[2:,   2:-1])
+            us = 0.5*(u[:-2,  2:-1] + u[1:-1, 2:-1])
+            vn = 0.5*(v[2:,   1:-2] + v[2:,   2:-1])
+            vs = 0.5*(v[1:-1, 1:-2] + v[1:-1, 2:-1])
+            
+            convection = - (ue**2 - uw**2)/dx - (un*vn - us*vs)/dy
+            diffusion = self.nu * laplacian(u,dx,dy)[1:-1,2:-1]
+            ut[1:-1,2:-1] = u[1:-1,2:-1] + dt * (convection + diffusion)
                         
             # do y-momentum - only need to do interior points
-            for i in range(1,nx+1):
-                for j in range(2,ny+1):
-                    ve = 0.5*(v[j,i+1] + v[j,i])
-                    vw = 0.5*(v[j,i] + v[j,i-1])    
-                    
-                    ue = 0.5*(u[j,i+1] + u[j-1,i+1])
-                    uw = 0.5*(u[j,i] + u[j-1,i])
-                    
-                    vn = 0.5*(v[j+1,i] + v[j,i])
-                    vs = 0.5*(v[j,i] + v[j-1,i])            
-
-                    # convection = d(uv)/dx + d(vv)/dy
-                    convection = - (ue*ve - uw*vw)/dx - (vn*vn - vs*vs)/dy
-                    
-                    # diffusion = d2u/dx2 + d2u/dy2
-                    diffusion = self.nu*( (v[j,i+1] - 2.0*v[j,i] + v[j,i-1])/dx/dx + (v[j+1,i] - 2.0*v[j,i] + v[j-1,i])/dy/dy )
-                    
-                    vt[j,i] = v[j,i] + dt*(convection + diffusion)            
+            # v is vertical component of velocity, staggered negative on dimension 0
+            # v LL = v[2,1], UR = v[n,n] 
+            ve = 0.5*(v[2:-1, 1:-1] + v[2:-1, 2:  ])
+            vw = 0.5*(v[2:-1, :-2 ] + v[2:-1, 1:-1])
+            vn = 0.5*(v[2:-1, 1:-1] + v[3:,   1:-1])
+            vs = 0.5*(v[1:-2, 1:-1] + v[2:-1, 1:-1])
+            ue = 0.5*(u[1:-2, 2:  ] + u[2:-1,   2:  ])
+            uw = 0.5*(u[1:-2, 1:-1] + u[2:-1,   1:-1])
+            
+            convection = - (ue*ve - uw*vw)/dx - (vn*vn - vs*vs)/dy
+            diffusion = self.nu * laplacian(v,dx,dy)[2:-1,1:-1]
+            vt[2:-1,1:-1] = v[2:-1,1:-1] + dt * (convection + diffusion)         
             
             # do pressure - prhs = 1/dt * div(uhat)
             # we will only need to fill the interior points. This size is for convenient indexing

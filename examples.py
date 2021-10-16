@@ -37,9 +37,9 @@ def cavity_flow():
     fvis.streamplot(fluid)
 
 def cavity_flow_fvm():
-    fluid = cfd.NavierStokesFVM(N=[71,71],extent=[1,1],nu=0.01,beta=1.1)
+    fluid = cfd.NavierStokesFVM(N=[41,41],extent=[1,1],nu=0.01,beta=1.1)
     
-    fluid.solve(.001)
+    fluid.solve(.0001)
     fvis.streamplot(fluid)
 
 if __name__ == "__main__": 
