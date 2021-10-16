@@ -106,6 +106,8 @@ def get_staggered_indexers(dim, ndims, boundary, stagger_dir, stagger_dim):
             elif boundary == Boundary.MAX:
                 i_wall[dim] = -1
                 i_in[dim] = -2
+    else:
+        pass
 
     return tuple(i_wall), tuple(i_in)
 

@@ -37,19 +37,14 @@ def cavity_flow():
     fvis.streamplot(fluid)
 
 def cavity_flow_fvm():
-    fluid = cfd.NavierStokesFVM(N=[7,7],extent=[1,1],nu=0.01,beta=1.1)
+    fluid = cfd.NavierStokesFVM(N=[71,71],extent=[1,1],nu=0.01,beta=1.1)
     
-    fluid.add_boundary_conditions('u', [
-        bc.Dirichlet(dim=0, ndims=2, v=0, end=bc.Boundary.MIN, stagger=bc.Boundary.NEGATIVE),
-        bc.Dirichlet(dim=0, ndims=2, v=u_lid, end=bc.Boundary.MAX, stagger=bc.Boundary.NEGATIVE),
-        bc.Dirichlet(dim=1, ndims=2, v=0, end=bc.Boundary.MIN, stagger=bc.Boundary.NEGATIVE),
-        bc.Dirichlet(dim=1, ndims=2, v=0, end=bc.Boundary.MAX, stagger=bc.Boundary.NEGATIVE),
-    ])
-
+    fluid.solve(.001)
+    fvis.streamplot(fluid)
 
 if __name__ == "__main__": 
-    cavity_flow()
-    #cavity_flow_fvm()
+    #cavity_flow()
+    cavity_flow_fvm()
     #membrane()
     
     

@@ -1,6 +1,9 @@
 import numpy as np
 from collections import defaultdict
 import space
+import scipy.linalg
+import scipy.sparse
+import scipy.sparse.linalg
 
 def ddx(f, dx):
     result = np.zeros_like(f)
@@ -146,4 +149,114 @@ class NavierStokesFVM(Fluid):
         self.p = np.zeros(self.space.N+2) # include ghost cells
 
     def solve(self, dt, cb=None, its=100):
-        pass
+        ny,nx = self.space.N
+        dy,dx = self.space.delta
+
+        Ut = 10.0
+        Ub = 0.0
+        Vl = 0.0
+        Vr = 0.0
+
+        u,v,ut,vt,p = self.u, self.v, self.ut, self.vt, self.p
+
+        Ap = np.zeros([ny,nx])
+        Ae = 1.0/dx/dx*np.ones([ny,nx])
+        As = 1.0/dy/dy*np.ones([ny,nx])
+        An = 1.0/dy/dy*np.ones([ny,nx])
+        Aw = 1.0/dx/dx*np.ones([ny,nx])
+        # set left wall coefs
+        Aw[:,0] = 0.0
+        # set right wall coefs
+        Ae[:,-1] = 0.0
+        # set top wall coefs
+        An[-1,:] = 0.0
+        # set bottom wall coefs
+        As[0,:] = 0.0
+        Ap = -(Aw + Ae + An + As)
+
+        n = nx*ny
+        d0 = Ap.reshape(n)
+        de = Ae.reshape(n)[:-1]
+        dw = Aw.reshape(n)[1:]
+        ds = As.reshape(n)[nx:]
+        dn = An.reshape(n)[:-nx]
+        A1 = scipy.sparse.diags([d0, de, dw, dn, ds], [0, 1, -1, nx, -nx], format='csr')
+
+        nsteps = 1000
+        for n in range(0,nsteps):
+            # left wall
+            u[1:-1,1] = 0.0
+            # right wall
+            u[1:-1,-1] = 0.0
+            # top wall
+            u[-1,1:] = 2.0*Ut - u[-2,1:]
+            # bottom wall
+            u[0,1:] = 2.0*Ub - u[1,1:]
+
+            # left wall
+            v[1:,0] = 2.0*Vl - v[1:,1]
+            # right wall
+            v[1:,-1] = 2.0*Vr - v[1:,-2]
+            # bottom wall
+            v[1,1:-1] = 0.0
+            # top wall
+            v[-1,1:-1] = 0.0    
+        
+
+            # do x-momentum first - u is of size (nx + 2) x (ny + 2) - only need to do the interior points
+            for i in range(2,nx+1):
+                for j in range(1,ny+1):
+                    ue = 0.5*(u[j,i+1] + u[j,i])
+                    uw = 0.5*(u[j,i]   + u[j,i-1])    
+                    
+                    un = 0.5*(u[j+1,i] + u[j,i])
+                    us = 0.5*(u[j,i] + u[j-1,i])            
+                    
+                    vn = 0.5*(v[j+1,i] + v[j+1,i-1])
+                    vs = 0.5*(v[j,i] + v[j,i-1])
+                    
+                    # convection = - d(uu)/dx - d(vu)/dy
+                    convection = - (ue*ue - uw*uw)/dx - (un*vn - us*vs)/dy
+                    
+                    # diffusion = d2u/dx2 + d2u/dy2
+                    diffusion = self.nu*( (u[j,i+1] - 2.0*u[j,i] + u[j,i-1])/dx/dx + (u[j+1,i] - 2.0*u[j,i] + u[j-1,i])/dy/dy )
+                    
+                    ut[j,i] = u[j,i] + dt *(convection + diffusion)
+                        
+            # do y-momentum - only need to do interior points
+            for i in range(1,nx+1):
+                for j in range(2,ny+1):
+                    ve = 0.5*(v[j,i+1] + v[j,i])
+                    vw = 0.5*(v[j,i] + v[j,i-1])    
+                    
+                    ue = 0.5*(u[j,i+1] + u[j-1,i+1])
+                    uw = 0.5*(u[j,i] + u[j-1,i])
+                    
+                    vn = 0.5*(v[j+1,i] + v[j,i])
+                    vs = 0.5*(v[j,i] + v[j-1,i])            
+
+                    # convection = d(uv)/dx + d(vv)/dy
+                    convection = - (ue*ve - uw*vw)/dx - (vn*vn - vs*vs)/dy
+                    
+                    # diffusion = d2u/dx2 + d2u/dy2
+                    diffusion = self.nu*( (v[j,i+1] - 2.0*v[j,i] + v[j,i-1])/dx/dx + (v[j+1,i] - 2.0*v[j,i] + v[j-1,i])/dy/dy )
+                    
+                    vt[j,i] = v[j,i] + dt*(convection + diffusion)            
+            
+            # do pressure - prhs = 1/dt * div(uhat)
+            # we will only need to fill the interior points. This size is for convenient indexing
+            divut = np.zeros([ny+2,nx+2]) 
+            divut[1:-1,1:-1] = (ut[1:-1,2:] - ut[1:-1,1:-1])/dx + (vt[2:,1:-1] - vt[1:-1,1:-1])/dy
+
+            prhs = 1.0/dt * divut
+            
+            ###### Use the sparse linear solver
+            
+            #     pt = scipy.sparse.linalg.spsolve(A1,prhs[1:-1,1:-1].ravel()) #theta=sc.linalg.solve_triangular(A,d)
+            pt,info = scipy.sparse.linalg.bicg(A1,prhs[1:-1,1:-1].ravel(),tol=1e-10) #theta=sc.linalg.solve_triangular(A,d)
+            p[:,:] = 0#np.zeros([ny+2,nx+2])
+            p[1:-1,1:-1] = pt.reshape([ny,nx])
+
+            # time advance
+            u[1:-1,2:-1] = ut[1:-1,2:-1] - dt * (p[1:-1,2:-1] - p[1:-1,1:-2])/dx
+            v[2:-1,1:-1] = vt[2:-1,1:-1] - dt * (p[2:-1,1:-1] - p[1:-2,1:-1])/dy  

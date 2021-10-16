@@ -9,6 +9,7 @@ class RegularGrid(Space):
 
         self.N = np.array(N)
         self.extent = np.array(extent)
+
         self.delta = self.extent / (self.N - 1)
         self.coords = [ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)]
         self.grid_coords = np.meshgrid(*self.coords)
@@ -23,10 +24,11 @@ class StaggeredGrid(Space):
 
         self.N = np.array(N)
         self.extent = np.array(extent)
+        
         self.delta = self.extent / self.N
         self.centered_coords = [ np.linspace(d/2.0,e-d/2.0,n,endpoint=True) for d,e,n in zip(self.delta, self.extent, self.N)]
         self.staggered_coords = [ np.linspace(0,e,n+1,endpoint=True) for d,e,n in zip(self.delta, self.extent, self.N) ]
-        self.centered_grid_coords = np.meshgrid(*self.centered_coords)
+        self.grid_coords = np.meshgrid(*self.centered_coords)
         # self.staggered_grid_coords = 
         # x-staggered coordinates
         #xu,yu = np.meshgrid(xxs, yy)
