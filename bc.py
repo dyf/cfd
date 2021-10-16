@@ -1,5 +1,5 @@
 from enum import Enum
-import space
+import space as cfdsp
 
 class Boundary(Enum):
     MIN = 0
@@ -10,7 +10,7 @@ class BoundaryCondition:
         self.v = v
         self.space = space
 
-        if isinstance(space, space.StaggeredGrid):
+        if isinstance(space, cfdsp.StaggeredGrid):
             self.i_wall, self.i_in = get_staggered_indexers()
         else:
             self.i_wall, self.i_in = get_indexers(dim,len(space.N),b)

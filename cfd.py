@@ -21,6 +21,9 @@ def laplacian(f, dx, dy):
                       + (f[2:,1:-1] -2.0*f[1:-1,1:-1] + f[:-2,1:-1])/dy/dy
     return result
 
+def xmom(f, u, v, dx, dy):
+    pass
+
 def div(u,v,dx,dy):
     return ddx(u,dx) + ddy(v,dy)
 
@@ -204,7 +207,7 @@ class NavierStokesFVM(Fluid):
         
             # do x-momentum first - u is of size (nx + 2) x (ny + 2) - only need to do the interior points
             # u is horizontonal component of velocity, dimension 1
-            # u[1,2] is the LL corner, u[n,n] is the UR corner
+            # LL = u[1,2] , UR = u[n,n] 
 
             ue = 0.5*(u[1:-1, 2:-1] + u[1:-1, 3:  ])
             uw = 0.5*(u[1:-1, 1:-2] + u[1:-1, 2:-1])
@@ -220,14 +223,15 @@ class NavierStokesFVM(Fluid):
             # do y-momentum - only need to do interior points
             # v is vertical component of velocity, staggered negative on dimension 0
             # v LL = v[2,1], UR = v[n,n] 
+
             ve = 0.5*(v[2:-1, 1:-1] + v[2:-1, 2:  ])
             vw = 0.5*(v[2:-1, :-2 ] + v[2:-1, 1:-1])
             vn = 0.5*(v[2:-1, 1:-1] + v[3:,   1:-1])
             vs = 0.5*(v[1:-2, 1:-1] + v[2:-1, 1:-1])
-            ue = 0.5*(u[1:-2, 2:  ] + u[2:-1,   2:  ])
-            uw = 0.5*(u[1:-2, 1:-1] + u[2:-1,   1:-1])
+            ue = 0.5*(u[1:-2, 2:  ] + u[2:-1, 2:  ])
+            uw = 0.5*(u[1:-2, 1:-1] + u[2:-1, 1:-1])
             
-            convection = - (ue*ve - uw*vw)/dx - (vn*vn - vs*vs)/dy
+            convection = - (ue*ve - uw*vw)/dx - (vn**2 - vs**2)/dy
             diffusion = self.nu * laplacian(v,dx,dy)[2:-1,1:-1]
             vt[2:-1,1:-1] = v[2:-1,1:-1] + dt * (convection + diffusion)         
             

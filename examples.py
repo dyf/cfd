@@ -40,11 +40,11 @@ def cavity_flow_fvm():
     fluid = cfd.NavierStokesFVM(N=[41,41],extent=[1,1],nu=0.01,beta=1.1)
     
     fluid.solve(.0001)
-    fvis.streamplot(fluid)
+    fvis.streamplot(fluid, staggered=True)
 
 if __name__ == "__main__": 
-    #cavity_flow()
-    cavity_flow_fvm()
+    cavity_flow()
+    #cavity_flow_fvm()
     #membrane()
     
     
