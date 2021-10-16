@@ -21,8 +21,51 @@ def laplacian(f, dx, dy):
                       + (f[2:,1:-1] -2.0*f[1:-1,1:-1] + f[:-2,1:-1])/dy/dy
     return result
 
-def xmom(f, u, v, dx, dy):
-    pass
+def momentum(u, v, dx, dy, nu):
+    # u rhs: - d(uu)/dx - d(vu)/dy + ν d2(u)
+    # v rhs: - d(uv)/dx - d(vv)/dy + ν d2(v)
+
+    return ( 
+        - ddx(u*u,dx) - ddy(v*u,dy) + nu*laplacian(u,dx,dy),
+        - ddx(u*v,dx) - ddy(v*v,dy) + nu*laplacian(v,dx,dy)
+    )
+
+def momentum_staggered(u, v, dx, dy, nu):
+    # do x-momentum - u is of size (nx + 2) x (ny + 2) - only need to do the interior points
+    # u is horizontonal component of velocity, dimension 1
+    # LL = u[1,2] , UR = u[n,n] 
+
+    ue = 0.5*(u[1:-1, 2:-1] + u[1:-1, 3:  ])
+    uw = 0.5*(u[1:-1, 1:-2] + u[1:-1, 2:-1])
+    un = 0.5*(u[1:-1, 2:-1] + u[2:,   2:-1])
+    us = 0.5*(u[:-2,  2:-1] + u[1:-1, 2:-1])
+    vn = 0.5*(v[2:,   1:-2] + v[2:,   2:-1])
+    vs = 0.5*(v[1:-1, 1:-2] + v[1:-1, 2:-1])
+    
+    convection = - (ue**2 - uw**2)/dx - (un*vn - us*vs)/dy
+    diffusion = nu * laplacian(u,dx,dy)[1:-1,2:-1]
+
+    mx = convection + diffusion
+                
+    # do y-momentum - only need to do interior points
+    # v is vertical component of velocity, staggered negative on dimension 0
+    # v LL = v[2,1], UR = v[n,n] 
+
+    ve = 0.5*(v[2:-1, 1:-1] + v[2:-1, 2:  ])
+    vw = 0.5*(v[2:-1, :-2 ] + v[2:-1, 1:-1])
+    vn = 0.5*(v[2:-1, 1:-1] + v[3:,   1:-1])
+    vs = 0.5*(v[1:-2, 1:-1] + v[2:-1, 1:-1])
+    ue = 0.5*(u[1:-2, 2:  ] + u[2:-1, 2:  ])
+    uw = 0.5*(u[1:-2, 1:-1] + u[2:-1, 1:-1])
+    
+    convection = - (ue*ve - uw*vw)/dx - (vn**2 - vs**2)/dy
+    diffusion = nu * laplacian(v,dx,dy)[2:-1,1:-1]
+
+    my = convection + diffusion
+
+    return mx, my
+
+
 
 def div(u,v,dx,dy):
     return ddx(u,dx) + ddy(v,dy)
@@ -107,10 +150,8 @@ class NavierStokesProjectionMethod(Fluid):
             apply_v_bcs(v)
 
             # do the x-momentum RHS
-            # u rhs: - d(uu)/dx - d(vu)/dy + ν d2(u)
-            uRHS = - ddx(u*u,dx) - ddy(v*u,dy) + self.nu*laplacian(u,dx,dy)
-            # v rhs: - d(uv)/dx - d(vv)/dy + ν d2(v)
-            vRHS = - ddx(u*v,dx) - ddy(v*v,dy) + self.nu*laplacian(v,dx,dy)
+            
+            uRHS, vRHS = momentum(u,v,dx,dy,self.nu)
             
             uh = u + dt*uRHS
             vh = v + dt*vRHS
@@ -205,35 +246,10 @@ class NavierStokesFVM(Fluid):
             # top wall
             v[-1,1:-1] = 0.0    
         
-            # do x-momentum first - u is of size (nx + 2) x (ny + 2) - only need to do the interior points
-            # u is horizontonal component of velocity, dimension 1
-            # LL = u[1,2] , UR = u[n,n] 
+            mx, my = momentum_staggered(u, v, dx, dy, self.nu)
 
-            ue = 0.5*(u[1:-1, 2:-1] + u[1:-1, 3:  ])
-            uw = 0.5*(u[1:-1, 1:-2] + u[1:-1, 2:-1])
-            un = 0.5*(u[1:-1, 2:-1] + u[2:,   2:-1])
-            us = 0.5*(u[:-2,  2:-1] + u[1:-1, 2:-1])
-            vn = 0.5*(v[2:,   1:-2] + v[2:,   2:-1])
-            vs = 0.5*(v[1:-1, 1:-2] + v[1:-1, 2:-1])
-            
-            convection = - (ue**2 - uw**2)/dx - (un*vn - us*vs)/dy
-            diffusion = self.nu * laplacian(u,dx,dy)[1:-1,2:-1]
-            ut[1:-1,2:-1] = u[1:-1,2:-1] + dt * (convection + diffusion)
-                        
-            # do y-momentum - only need to do interior points
-            # v is vertical component of velocity, staggered negative on dimension 0
-            # v LL = v[2,1], UR = v[n,n] 
-
-            ve = 0.5*(v[2:-1, 1:-1] + v[2:-1, 2:  ])
-            vw = 0.5*(v[2:-1, :-2 ] + v[2:-1, 1:-1])
-            vn = 0.5*(v[2:-1, 1:-1] + v[3:,   1:-1])
-            vs = 0.5*(v[1:-2, 1:-1] + v[2:-1, 1:-1])
-            ue = 0.5*(u[1:-2, 2:  ] + u[2:-1, 2:  ])
-            uw = 0.5*(u[1:-2, 1:-1] + u[2:-1, 1:-1])
-            
-            convection = - (ue*ve - uw*vw)/dx - (vn**2 - vs**2)/dy
-            diffusion = self.nu * laplacian(v,dx,dy)[2:-1,1:-1]
-            vt[2:-1,1:-1] = v[2:-1,1:-1] + dt * (convection + diffusion)         
+            ut[1:-1,2:-1] = u[1:-1,2:-1] + dt * mx
+            vt[2:-1,1:-1] = v[2:-1,1:-1] + dt * my        
             
             # do pressure - prhs = 1/dt * div(uhat)
             # we will only need to fill the interior points. This size is for convenient indexing
