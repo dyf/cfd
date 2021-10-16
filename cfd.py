@@ -6,21 +6,18 @@ import scipy.sparse
 import scipy.sparse.linalg
 
 def ddx(f, dx):
-    result = np.zeros_like(f)
-    result[1:-1,1:-1] = (f[1:-1,2:] - f[1:-1,:-2])/2.0/dx
-    return result
+    return (f[1:-1,2:] - f[1:-1,:-2])/2.0/dx
 
 def ddy(f, dy):
-    result = np.zeros_like(f)
-    result[1:-1,1:-1] = (f[2:,1:-1] - f[:-2,1:-1])/2.0/dy
-    return result
+    return (f[2:,1:-1] - f[:-2,1:-1])/2.0/dy
     
 def laplacian(f, dx, dy):
-    result = np.zeros_like(f)
-    result[1:-1,1:-1] = (f[1:-1,2:] - 2.0*f[1:-1,1:-1] + f[1:-1,:-2])/dx/dx \
-                      + (f[2:,1:-1] -2.0*f[1:-1,1:-1] + f[:-2,1:-1])/dy/dy
-    return result
+    return (f[1:-1,2:] - 2.0*f[1:-1,1:-1] + f[1:-1,:-2])/dx/dx + \
+           (f[2:,1:-1] -2.0*f[1:-1,1:-1] + f[:-2,1:-1])/dy/dy
 
+def div(u,v,dx,dy):
+    return ddx(u,dx) + ddy(v,dy)
+    
 def momentum(u, v, dx, dy, nu):
     # u rhs: - d(uu)/dx - d(vu)/dy + ν d2(u)
     # v rhs: - d(uv)/dx - d(vv)/dy + ν d2(v)
@@ -43,7 +40,7 @@ def momentum_staggered(u, v, dx, dy, nu):
     vs = 0.5*(v[1:-1, 1:-2] + v[1:-1, 2:-1])
     
     convection = - (ue**2 - uw**2)/dx - (un*vn - us*vs)/dy
-    diffusion = nu * laplacian(u,dx,dy)[1:-1,2:-1]
+    diffusion = nu * laplacian(u,dx,dy)[:,1:]#[1:-1,2:-1]
 
     mx = convection + diffusion
                 
@@ -59,16 +56,13 @@ def momentum_staggered(u, v, dx, dy, nu):
     uw = 0.5*(u[1:-2, 1:-1] + u[2:-1, 1:-1])
     
     convection = - (ue*ve - uw*vw)/dx - (vn**2 - vs**2)/dy
-    diffusion = nu * laplacian(v,dx,dy)[2:-1,1:-1]
+    diffusion = nu * laplacian(v,dx,dy)[1:,:]#[2:-1,1:-1]
 
     my = convection + diffusion
 
     return mx, my
 
 
-
-def div(u,v,dx,dy):
-    return ddx(u,dx) + ddy(v,dy)
 
 def pressure_poisson(p, dx, dy, b, tol, max_its, cb=None):
     cb = cb if cb is not None else lambda x: None
@@ -138,6 +132,8 @@ class NavierStokesProjectionMethod(Fluid):
         cb = cb if cb is not None else lambda a,b,c,d: None 
 
         u,v,p,uh,vh = self.u, self.v, self.p, self._x[0], self._x[1]
+        prhs = np.zeros_like(u)
+
         dx,dy = self.space.delta 
 
         apply_p_bcs = self.get_boundary_conditions_fn('p')
@@ -153,19 +149,19 @@ class NavierStokesProjectionMethod(Fluid):
             
             uRHS, vRHS = momentum(u,v,dx,dy,self.nu)
             
-            uh = u + dt*uRHS
-            vh = v + dt*vRHS
+            uh[1:-1,1:-1] = u[1:-1,1:-1] + dt*uRHS
+            vh[1:-1,1:-1] = v[1:-1,1:-1] + dt*vRHS
             
             # next compute the pressure RHS: prhs = div(un)/dt + div( [urhs, vrhs])
-            prhs = div(uh,vh,dx,dy)/dt
+            prhs[1:-1,1:-1] = div(uh,vh,dx,dy)/dt
             p,err = pressure_poisson(p, dx, dy, prhs,
                                      tol=p_tol, max_its=p_max_its,
                                      cb=apply_p_bcs)
             
             # finally compute the true velocities
             # u_{n+1} = uh - dt*dpdx
-            u = uh - dt*ddx(p,dx)
-            v = vh - dt*ddy(p,dy)
+            u[1:-1,1:-1] = uh[1:-1,1:-1] - dt*ddx(p,dx)
+            v[1:-1,1:-1] = vh[1:-1,1:-1] - dt*ddy(p,dy)
 
             cb(i, u, v, p)
 
@@ -254,6 +250,7 @@ class NavierStokesFVM(Fluid):
             # do pressure - prhs = 1/dt * div(uhat)
             # we will only need to fill the interior points. This size is for convenient indexing
             divut = np.zeros([ny+2,nx+2]) 
+            #divut[1:-1,1:-1] = div(ut,vt,dx,dy)
             divut[1:-1,1:-1] = (ut[1:-1,2:] - ut[1:-1,1:-1])/dx + (vt[2:,1:-1] - vt[1:-1,1:-1])/dy
 
             prhs = 1.0/dt * divut
