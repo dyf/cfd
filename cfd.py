@@ -64,8 +64,16 @@ def momentum_staggered(u, v, dx, dy, nu):
 
 
 
-def pressure_poisson(p, dx, dy, b, tol, max_its, cb=None):
+def pressure_poisson(u, v, dx, dy, dt, tol, max_its, b=None, p=None, cb=None):
     cb = cb if cb is not None else lambda x: None
+
+    if b is None:
+        b = np.zeros_like(u)
+
+    if p is None:
+        p = np.zeros_like(u)
+
+    b[1:-1,1:-1] = div(u,v,dx,dy)/dt
 
     pn = p.copy()
     it = 0
@@ -173,8 +181,7 @@ class NavierStokesProjectionMethod(Fluid):
     def solve(self, dt, cb=None, its=100, p_tol=1e-3, p_max_its=50):
         cb = cb if cb is not None else lambda a,b,c,d: None 
 
-        u,v,p,uh,vh = self.u, self.v, self.p, self._x[0], self._x[1]
-        prhs = np.zeros_like(u)
+        u,v,p,uh,vh,b = self.u, self.v, self.p, self._x[0], self._x[1], self._x[2]
 
         dx,dy = self.space.delta 
 
@@ -193,10 +200,8 @@ class NavierStokesProjectionMethod(Fluid):
             
             uh[1:-1,1:-1] = u[1:-1,1:-1] + dt*uRHS
             vh[1:-1,1:-1] = v[1:-1,1:-1] + dt*vRHS
-            
-            # next compute the pressure RHS: prhs = div(un)/dt + div( [urhs, vrhs])
-            prhs[1:-1,1:-1] = div(uh,vh,dx,dy)/dt
-            p,err = pressure_poisson(p, dx, dy, prhs,
+                        
+            p,err = pressure_poisson(uh, vh, dx, dy, dt, b=b, p=p,
                                      tol=p_tol, max_its=p_max_its,
                                      cb=apply_p_bcs)
             
