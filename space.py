@@ -12,7 +12,7 @@ class RegularGrid(Space):
 
         self.delta = self.extent / (self.N - 1)
         self.coords = [ np.linspace(0,e,n) for e,n in zip(self.extent,self.N)]
-        self.grid_coords = np.meshgrid(*self.coords)
+        self.grid_coords = np.meshgrid(*self.coords, indexing='ij')
 
 class Stagger(Enum):
     NEGATIVE = 0
