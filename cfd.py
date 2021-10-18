@@ -62,10 +62,8 @@ def momentum_staggered(u, v, dx, dy, nu):
 
     return mx, my
 
-
-
-def pressure_poisson(u, v, dx, dy, dt, tol, max_its, b=None, p=None, cb=None):
-    cb = cb if cb is not None else lambda x: None
+def pressure_poisson(u, v, dx, dy, dt, tol, max_its, b=None, p=None, bcs=None):
+    bcs = bcs if bcs else []
 
     if b is None:
         b = np.zeros_like(u)
@@ -80,7 +78,8 @@ def pressure_poisson(u, v, dx, dy, dt, tol, max_its, b=None, p=None, cb=None):
     err = float("inf")
     
     while it < max_its and err > tol:
-        cb(p)
+        for bc in bcs:
+            bc.apply(p)
 
         np.copyto(pn, p)
             
@@ -96,21 +95,18 @@ def pressure_poisson(u, v, dx, dy, dt, tol, max_its, b=None, p=None, cb=None):
         
     return p, err
 
-def sparse_pressure_matrix(nx, ny, dx, dy, v_left, v_right, v_top, v_bottom):
+def sparse_pressure_matrix(nx, ny, dx, dy, bc_left, bc_right, bc_bottom, bc_top):
+
     Ap = np.zeros([ny,nx])
     Ae = 1.0/dx/dx*np.ones([ny,nx])
     As = 1.0/dy/dy*np.ones([ny,nx])
     An = 1.0/dy/dy*np.ones([ny,nx])
     Aw = 1.0/dx/dx*np.ones([ny,nx])
 
-    # set left wall coefs
-    Aw[:,0] = v_left
-    # set right wall coefs
-    Ae[:,-1] = v_right
-    # set top wall coefs
-    An[-1,:] = v_top
-    # set bottom wall coefs
-    As[0,:] = v_bottom
+    bc_left.apply(Aw)
+    bc_right.apply(Ae)
+    bc_bottom.apply(As)
+    bc_top.apply(An)
 
     Ap = -(Aw + Ae + An + As)
 
@@ -143,22 +139,16 @@ class Fluid:
         self.space = space
         self.bcs = defaultdict(list)
 
-    def add_boundary_conditions(self, name, bcs):
+    def add_boundary_condition(self, name, bc, **kwargs):
+        bctype = bc.pop('type')
+        self.bcs[name].append(bctype(space=self.space,**bc,**kwargs))
+
+    def add_boundary_conditions(self, name, bcs, **kwargs):
         for bc in bcs:
-            bctype = bc.pop('type')
-            self.bcs[name].append(bctype(space=self.space,**bc))
+            self.add_boundary_condition(name,bc,**kwargs)         
 
     def get_boundary_conditions(self, name):
         return self.bcs[name]
-
-    def get_boundary_conditions_fn(self, name):
-        bcs = self.get_boundary_conditions(name)
-
-        def x(arr):
-            for bc in bcs:
-                bc.apply(arr)
-
-        return x   
 
     def solve(self, dt, cb=None, **kwargs):
         raise NotImplementedError
@@ -185,14 +175,17 @@ class NavierStokesProjectionMethod(Fluid):
 
         dx,dy = self.space.delta 
 
-        apply_p_bcs = self.get_boundary_conditions_fn('p')
-        apply_u_bcs = self.get_boundary_conditions_fn('u')
-        apply_v_bcs = self.get_boundary_conditions_fn('v')
+        p_bcs = self.get_boundary_conditions('p')
+        u_bcs = self.get_boundary_conditions('u')
+        v_bcs = self.get_boundary_conditions('v')
 
         for i in range(its):
             
-            apply_u_bcs(u)
-            apply_v_bcs(v)
+            for bc in u_bcs:
+                bc.apply(u)
+            
+            for bc in v_bcs:
+                bc.apply(v)
 
             # do the x-momentum RHS
             
@@ -203,7 +196,7 @@ class NavierStokesProjectionMethod(Fluid):
                         
             p,err = pressure_poisson(uh, vh, dx, dy, dt, b=b, p=p,
                                      tol=p_tol, max_its=p_max_its,
-                                     cb=apply_p_bcs)
+                                     bc_fn=apply_p_bcs)
             
             # finally compute the true velocities
             # u_{n+1} = uh - dt*dpdx
@@ -239,18 +232,29 @@ class NavierStokesFVM(Fluid):
         ny,nx = self.space.N
         dy,dx = self.space.delta
 
-        Ut = 10.0
-        Ub = 0.0
-        Vl = 0.0
-        Vr = 0.0
-
         u,v,ut,vt,p = self.u, self.v, self.ut, self.vt, self.p
 
-        A1 = sparse_pressure_matrix(nx, ny, dx, dy, 0, 0, 0, 0)
+        u_bcs = self.get_boundary_conditions('u')
+        v_bcs = self.get_boundary_conditions('v')
+        p_bcs = [ self.get_boundary_conditions(x)[0] for x in ('p_left','p_right','p_bottom','p_top')]
+
+        def apply_p_bcs(A_left, A_right, A_bottom, A_top):
+            pL.apply(A_left)
+            pR.apply(A_right)
+            pB.apply(A_bottom)
+            pT.apply(A_top)
+
+        A1 = sparse_pressure_matrix(nx, ny, dx, dy, *p_bcs)
 
         nsteps = 1000
         for n in range(0,nsteps):
-            # left wall
+            for bc in u_bcs:
+                bc.apply(u)
+
+            for bc in v_bcs:
+                bc.apply(v)
+                
+            """  # left wall
             u[1:-1,1] = 0.0
             # right wall
             u[1:-1,-1] = 0.0
@@ -266,7 +270,7 @@ class NavierStokesFVM(Fluid):
             # bottom wall
             v[1,1:-1] = 0.0
             # top wall
-            v[-1,1:-1] = 0.0    
+            v[-1,1:-1] = 0.0      """
         
             mx, my = momentum_staggered(u, v, dx, dy, self.nu)
 

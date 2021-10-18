@@ -6,12 +6,13 @@ class Boundary(Enum):
     MAX = 1
 
 class BoundaryCondition: 
-    def __init__(self, dim, b, v=None, space=None):
+    def __init__(self, dim, b, v=None, space=None, stagger_dir=None, stagger_dim=None):
         self.v = v
         self.space = space
+        self.b = b
 
-        if isinstance(space, cfdsp.StaggeredGrid):
-            self.i_wall, self.i_in = get_staggered_indexers()
+        if stagger_dir is not None:
+            self.i_wall, self.i_in = get_staggered_indexers(dim,len(space.N),b,stagger_dir,stagger_dim)
         else:
             self.i_wall, self.i_in = get_indexers(dim,len(space.N),b)
     
@@ -22,8 +23,13 @@ class Dirichlet(BoundaryCondition):
     def apply(self, arr):
         arr[self.i_wall] = self.v
 
+class DirichletGhost(BoundaryCondition):
+    def apply(self, arr):
+       arr[self.i_wall] = 2.0*self.v - arr[self.i_in]
+
 class Neumann(BoundaryCondition):
     def apply(self, arr):
+        # oddly I think this is also true for ghost dimensions
         arr[self.i_wall] = arr[self.i_in] - self.v * self.space.delta[self.dim]
 
 class NoSlip(BoundaryCondition):
@@ -86,7 +92,7 @@ if bdim != staggered dim (ghost):
 """
 
 def get_staggered_indexers(dim, ndims, boundary, stagger_dir, stagger_dim):
-    if stagger_dir == Stagger.NEGATIVE:
+    if stagger_dir == cfdsp.Stagger.NEGATIVE:
         if dim == stagger_dim:
             i_wall = [ slice(1,-1) ] * ndims
             i_in = [ slice(1,-1) ] * ndims
@@ -107,7 +113,7 @@ def get_staggered_indexers(dim, ndims, boundary, stagger_dir, stagger_dim):
                 i_wall[dim] = -1
                 i_in[dim] = -2
     else:
-        pass
+        raise NotImplementedError
 
     return tuple(i_wall), tuple(i_in)
 

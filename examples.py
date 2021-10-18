@@ -1,6 +1,7 @@
 import cfd
 import fvis
 import bc
+import space as sp
 
 def cavity_flow():
     fluid = cfd.NavierStokesProjectionMethod(N=[91,91], extent=[1,1], rho=1, nu=0.05)
@@ -38,6 +39,25 @@ def cavity_flow():
 
 def cavity_flow_fvm():
     fluid = cfd.NavierStokesFVM(N=[41,41],extent=[1,1],nu=0.01,beta=1.1)
+
+    fluid.add_boundary_conditions('u', [
+        dict(type=bc.DirichletGhost, dim=0, b=bc.Boundary.MIN, v=0),  # bottom
+        dict(type=bc.DirichletGhost, dim=0, b=bc.Boundary.MAX, v=10), # top
+        dict(type=bc.Dirichlet,      dim=1, b=bc.Boundary.MIN, v=0),  # left
+        dict(type=bc.Dirichlet,      dim=1, b=bc.Boundary.MAX, v=0),  # right
+    ], stagger_dir=sp.Stagger.NEGATIVE, stagger_dim=1)
+
+    fluid.add_boundary_conditions('v', [
+        dict(type=bc.Dirichlet,      dim=0, b=bc.Boundary.MIN, v=0), # bottom
+        dict(type=bc.Dirichlet,      dim=0, b=bc.Boundary.MIN, v=0), # top
+        dict(type=bc.DirichletGhost, dim=1, b=bc.Boundary.MIN, v=0), # left
+        dict(type=bc.DirichletGhost, dim=1, b=bc.Boundary.MIN, v=0), # right
+    ], stagger_dir=sp.Stagger.NEGATIVE, stagger_dim=0)
+
+    fluid.add_boundary_condition('p_left', dict(type=bc.Dirichlet, dim=1, b=bc.Boundary.MIN, v=0))
+    fluid.add_boundary_condition('p_right', dict(type=bc.Dirichlet, dim=1, b=bc.Boundary.MAX, v=0))
+    fluid.add_boundary_condition('p_bottom', dict(type=bc.Dirichlet, dim=0, b=bc.Boundary.MIN, v=0))
+    fluid.add_boundary_condition('p_top', dict(type=bc.Dirichlet, dim=0, b=bc.Boundary.MAX, v=0))
     
     fluid.solve(.0001)
     fvis.streamplot(fluid, staggered=True)
