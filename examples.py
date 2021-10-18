@@ -63,8 +63,8 @@ def cavity_flow_fvm():
     fvis.streamplot(fluid, staggered=True)
 
 if __name__ == "__main__": 
-    #cavity_flow()
-    cavity_flow_fvm()
+    cavity_flow()
+    #cavity_flow_fvm()
     #membrane()
     
     

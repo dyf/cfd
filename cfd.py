@@ -187,8 +187,7 @@ class NavierStokesProjectionMethod(Fluid):
             for bc in v_bcs:
                 bc.apply(v)
 
-            # do the x-momentum RHS
-            
+            # do the x-momentum RHS            
             uRHS, vRHS = momentum(u,v,dx,dy,self.nu)
             
             uh[1:-1,1:-1] = u[1:-1,1:-1] + dt*uRHS
@@ -196,7 +195,7 @@ class NavierStokesProjectionMethod(Fluid):
                         
             p,err = pressure_poisson(uh, vh, dx, dy, dt, b=b, p=p,
                                      tol=p_tol, max_its=p_max_its,
-                                     bc_fn=apply_p_bcs)
+                                     bcs=p_bcs)
             
             # finally compute the true velocities
             # u_{n+1} = uh - dt*dpdx
