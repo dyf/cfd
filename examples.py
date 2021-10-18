@@ -64,10 +64,22 @@ def cavity_flow_fvm():
     fluid.solve(.0001)
     fvis.streamplot(fluid, staggered=True)
 
+def cylinder_flow_lbm():
+    fluid = cfd.LatticeBoltzmann(N=(100,400), extent=[100,400], rho0=100., tau=0.6)
+
+    def debug(i,f):
+        if i % 100 == 0:
+            print(i)
+            fvis.plot_vorticity(f.vorticity)
+
+    fluid.solve(1,4000,cb=debug)
+    fvis.plot_vorticity(fluid.vorticity)
+
+
 if __name__ == "__main__": 
     #cavity_flow()
-    cavity_flow_fvm()
-    #membrane()
+    #cavity_flow_fvm()
+    cylinder_flow_lbm()
     
     
     

@@ -104,6 +104,7 @@ def sparse_pressure_matrix(nx, ny, dx, dy, bc_left, bc_right, bc_bottom, bc_top)
     An = 1.0/dy/dy*np.ones([ny,nx])
     Aw = 1.0/dx/dx*np.ones([ny,nx])
 
+    # a little optimistic that this generalizes to non-dirichlet bcs
     bc_left.apply(Aw)
     bc_right.apply(Ae)
     bc_bottom.apply(As)
@@ -257,24 +258,6 @@ class NavierStokesFVM(Fluid):
 
             for bc in v_bcs:
                 bc.apply(v)
-                
-            """  # left wall
-            u[1:-1,1] = 0.0
-            # right wall
-            u[1:-1,-1] = 0.0
-            # top wall
-            u[-1,1:] = 2.0*Ut - u[-2,1:]
-            # bottom wall
-            u[0,1:] = 2.0*Ub - u[1,1:]
-
-            # left wall
-            v[1:,0] = 2.0*Vl - v[1:,1]
-            # right wall
-            v[1:,-1] = 2.0*Vr - v[1:,-2]
-            # bottom wall
-            v[1,1:-1] = 0.0
-            # top wall
-            v[-1,1:-1] = 0.0      """
         
             mx, my = momentum_staggered(u, v, dx, dy, self.nu)
 
@@ -287,3 +270,74 @@ class NavierStokesFVM(Fluid):
             # time advance
             u[1:-1,2:-1] = ut[1:-1,2:-1] - dt * (p[1:-1,2:-1] - p[1:-1,1:-2])/dx
             v[2:-1,1:-1] = vt[2:-1,1:-1] - dt * (p[2:-1,1:-1] - p[1:-2,1:-1])/dy  
+
+
+class LatticeBoltzmann(Fluid):
+    def __init__(self, N, extent, rho0, tau):
+        super().__init__(space=space.RegularGrid(N, extent))
+        
+        self.rho0 = rho0
+        self.tau = tau
+
+        self.NL = 9
+        self.cxs = np.array([0, 0, 1, 1, 1, 0,-1,-1,-1])
+        self.cys = np.array([0, 1, 1, 0,-1,-1,-1, 0, 1])
+        self.weights = np.array([4/9,1/9,1/36,1/9,1/36,1/9,1/36,1/9,1/36]) # sums to 1
+        
+        Ny,Nx = self.space.N
+        self.F = np.zeros((Ny,Nx,self.NL))
+        self.vorticity = np.zeros(self.space.N)
+
+    def solve(self, dt, its, cb=None):
+        cb = cb if cb is not None else lambda x,y: None
+
+        Ny,Nx = self.space.N
+        NL = self.NL
+        Y,X = self.space.grid_coords
+
+        # Initial Conditions - flow to the right with some perturbations
+        self.F = np.ones((Ny,Nx,NL)) + 0.01*np.random.randn(Ny,Nx,NL)
+        self.F[:,:,3] += 2 * (1+0.2*np.cos(2*np.pi*X/Nx*4)) # idx 3 is "right"
+        
+        rho = np.sum(self.F,2)
+        idxs = np.arange(self.NL)
+        for i in idxs:
+            self.F[:,:,i] *= self.rho0 / rho
+
+        # Cylinder boundary
+        cylinder = (X - Nx/4)**2 + (Y - Ny/2)**2 < (Ny/4)**2
+
+
+        # Simulation Main Loop
+        for it in range(its):
+        
+            # Drift
+            for i, cx, cy in zip(idxs, self.cxs, self.cys):
+                self.F[:,:,i] = np.roll(self.F[:,:,i], cx, axis=1)
+                self.F[:,:,i] = np.roll(self.F[:,:,i], cy, axis=0)
+            
+            # Set reflective boundaries
+            bndryF = self.F[cylinder,:]
+            bndryF = bndryF[:,[0,5,6,7,8,1,2,3,4]]
+            
+            # Calculate fluid variables
+            rho = np.sum(self.F,2)
+            ux  = np.sum(self.F*self.cxs,2) / rho
+            uy  = np.sum(self.F*self.cys,2) / rho
+            
+            # Apply Collision
+            Feq = np.zeros_like(self.F)
+            for i, cx, cy, w in zip(idxs, self.cxs, self.cys, self.weights):
+                Feq[:,:,i] = rho*w* (1 + 3*(cx*ux+cy*uy) + 9*(cx*ux+cy*uy)**2/2 - 3*(ux**2+uy**2)/2)
+            
+            self.F += -(1.0/self.tau) * (self.F - Feq)
+            
+            # Apply boundary 
+            self.F[cylinder,:] = bndryF
+
+            ux[cylinder] = 0
+            uy[cylinder] = 0
+            self.vorticity = (np.roll(ux, -1, axis=0) - np.roll(ux, 1, axis=0)) - (np.roll(uy, -1, axis=1) - np.roll(uy, 1, axis=1))
+            self.vorticity[cylinder] = np.nan
+
+            cb(it, self)
