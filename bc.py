@@ -8,6 +8,7 @@ class Boundary(Enum):
 class BoundaryCondition: 
     def __init__(self, dim, b, v=None, space=None, stagger_dir=None, stagger_dim=None):
         self.v = v
+        self.dim = dim
         self.space = space
         self.b = b
 

@@ -4,6 +4,7 @@ import space
 import scipy.linalg
 import scipy.sparse
 import scipy.sparse.linalg
+from bc import Boundary
 
 def ddx(f, dx):
     return (f[1:-1,2:] - f[1:-1,:-2])/2.0/dx
@@ -150,6 +151,12 @@ class Fluid:
     def get_boundary_conditions(self, name):
         return self.bcs[name]
 
+    def get_boundary_condition(self, name, dim, b):
+        for bc in self.bcs[name]:
+            if bc.dim == dim and bc.b == b:
+                return bc
+        return None
+
     def solve(self, dt, cb=None, **kwargs):
         raise NotImplementedError
 
@@ -235,14 +242,12 @@ class NavierStokesFVM(Fluid):
 
         u_bcs = self.get_boundary_conditions('u')
         v_bcs = self.get_boundary_conditions('v')
-        p_bcs = [ self.get_boundary_conditions(x)[0] for x in ('p_left','p_right','p_bottom','p_top')]
-
-        def apply_p_bcs(A_left, A_right, A_bottom, A_top):
-            pL.apply(A_left)
-            pR.apply(A_right)
-            pB.apply(A_bottom)
-            pT.apply(A_top)
-
+        p_bcs = [ 
+            self.get_boundary_condition('p',dim=1,b=Boundary.MIN), # left
+            self.get_boundary_condition('p',dim=1,b=Boundary.MAX), # right
+            self.get_boundary_condition('p',dim=0,b=Boundary.MIN), # bottom
+            self.get_boundary_condition('p',dim=0,b=Boundary.MAX), # top
+        ]   
         A1 = sparse_pressure_matrix(nx, ny, dx, dy, *p_bcs)
 
         nsteps = 1000
