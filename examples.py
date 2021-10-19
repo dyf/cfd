@@ -1,3 +1,4 @@
+import numpy as np
 import cfd
 import fvis
 import space as sp
@@ -64,16 +65,29 @@ def cavity_flow_fvm():
     fluid.solve(.0001)
     fvis.streamplot(fluid, staggered=True)
 
-def cylinder_flow_lbm():
-    fluid = cfd.LatticeBoltzmann(N=(100,400), extent=[100,400], rho0=100., tau=0.6)
+import matplotlib.pyplot as plt
 
+def cylinder_flow_lbm():
+    np.random.seed(42)
+    
+    fluid = cfd.LatticeBoltzmann(N=(100,400), extent=[99,399], rho0=100., tau=0.6)
+
+    # initial conditions
+    Ny,Nx,NL = fluid.space.N[0], fluid.space.N[1], fluid.space.NL
+    fluid.F = 1 + 0.01*np.random.randn(Ny,Nx,NL)
+    Y,X = fluid.space.grid_coords
+    fluid.F[:,:,3] += 2 * (1+0.2*np.cos(2*np.pi*X/Nx*4))
+    fluid.object_mask = (X - Nx/4)**2 + (Y - Ny/2)**2 < (Ny/4)**2
+
+    fig = plt.figure()
     def debug(i,f):
-        if i % 100 == 0:
+        if i % 10 == 0:
             print(i)
             fvis.plot_vorticity(f.vorticity)
+            plt.pause(0.001)
 
     fluid.solve(1,4000,cb=debug)
-    fvis.plot_vorticity(fluid.vorticity)
+
 
 
 if __name__ == "__main__": 

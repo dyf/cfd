@@ -50,48 +50,6 @@ def get_indexers(dim, ndims, boundary):
         
     return tuple(i_wall), tuple(i_in)
 
-""" 
-# u 
-#   - horizontal component of velocity (horizontal/left-right = dim 1)
-#   - staggered left (negative dim 1)
-# left wall
-u[1:-1,1] = Ul 
-u[:,0] = Ul 
-
-# right wall
-u[1:-1,-1] = Ur 
-u[:,-1] = Ur 
-
-# top wall
-u[-1,1:] = 2.0*Ut - u[-2,1:] 
-u[-1,:] = Ut 
-
-# bottom wall
-u[0,1:] = 2.0*Ub - u[1,1:]
-u[0,:] = Ub
-
-# v
-#  - vertical component of velocity (vertical/up-down  = dim 0)
-#  - staggered down (negative dim 0)
-# left wall
-v[1:,0] = 2.0*Vl - v[1:,1]
-# right wall
-v[1:,-1] = 2.0*Vr - v[1:,-2]
-# bottom wall
-v[1,1:-1] = Vb
-# top wall
-v[-1,1:-1] = Vt 
-"""
-
-"""
-if bdim = staggered dim 
-  if min: 1 on dim, 1:-1 e.e., v = c
-  if max: -1 on dim, 1:-1 e.e., v = c
-if bdim != staggered dim (ghost): 
-  if min: 0 on dim, 1: e.e., v = 2c - inside
-  if max: -1 on dim, 1: e.e., v = 2c - inside
-"""
-
 def get_staggered_indexers(dim, ndims, boundary, stagger_dir, stagger_dim):
     if stagger_dir == cfdsp.Stagger.NEGATIVE:
         if dim == stagger_dim:
@@ -117,7 +75,3 @@ def get_staggered_indexers(dim, ndims, boundary, stagger_dir, stagger_dim):
         raise NotImplementedError
 
     return tuple(i_wall), tuple(i_in)
-
-if __name__ == "__main__":
-    iw,ii = get_staggered_indexers(0,2,Boundary.MIN,stagger_dir=Stagger.NEGATIVE, stagger_dim=0)
-    print(iw)

@@ -20,6 +20,7 @@ def streamplot(fluid, staggered=False, fig=None):
     plt.show()
 
 def plot_vorticity(vorticity):
+    plt.cla()
     cmap = plt.cm.bwr.copy()
     cmap.set_bad('black')
     plt.imshow(vorticity, cmap=cmap)
@@ -29,4 +30,3 @@ def plot_vorticity(vorticity):
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)	
     ax.set_aspect('equal')	
-    plt.show()

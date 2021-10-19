@@ -274,70 +274,63 @@ class NavierStokesFVM(Fluid):
 
 class LatticeBoltzmann(Fluid):
     def __init__(self, N, extent, rho0, tau):
-        super().__init__(space=space.RegularGrid(N, extent))
-        
-        self.rho0 = rho0
-        self.tau = tau
+        super().__init__(space=space.LatticeGrid(N, extent))                
 
-        self.NL = 9
-        self.cxs = np.array([0, 0, 1, 1, 1, 0,-1,-1,-1])
-        self.cys = np.array([0, 1, 1, 0,-1,-1,-1, 0, 1])
-        self.weights = np.array([4/9,1/9,1/36,1/9,1/36,1/9,1/36,1/9,1/36]) # sums to 1
+        self.rho0 = 100    # average density
+        self.tau = 0.6    # collision timescale        
+
+        self.F = np.zeros(np.append(self.space.N, [self.space.NL]))
+        self.rho = np.zeros(self.space.N)
+        self.ux = np.zeros(self.space.N)
+        self.uy = np.zeros(self.space.N)
         
-        Ny,Nx = self.space.N
-        self.F = np.zeros((Ny,Nx,self.NL))
-        self.vorticity = np.zeros(self.space.N)
+        self.object_mask = self.space.grid_coords[0] < 0
+
+    @property  
+    def vorticity(self):
+        v = ( (np.roll(self.ux, -1, axis=0) - np.roll(self.ux, 1, axis=0)) -
+              (np.roll(self.uy, -1, axis=1) - np.roll(self.uy, 1, axis=1)) )
+        v[self.object_mask] = np.nan
+        return v
 
     def solve(self, dt, its, cb=None):
-        cb = cb if cb is not None else lambda x,y: None
-
-        Ny,Nx = self.space.N
-        NL = self.NL
-        Y,X = self.space.grid_coords
-
-        # Initial Conditions - flow to the right with some perturbations
-        self.F = np.ones((Ny,Nx,NL)) + 0.01*np.random.randn(Ny,Nx,NL)
-        self.F[:,:,3] += 2 * (1+0.2*np.cos(2*np.pi*X/Nx*4)) # idx 3 is "right"
+        Ny, Nx = self.space.N        
+        idxs, cxs, cys, weights = self.space.idxs, self.space.cxs, self.space.cys, self.space.weights
         
-        rho = np.sum(self.F,2)
-        idxs = np.arange(self.NL)
+        self.rho = np.sum(self.F,2)
         for i in idxs:
-            self.F[:,:,i] *= self.rho0 / rho
-
-        # Cylinder boundary
-        cylinder = (X - Nx/4)**2 + (Y - Ny/2)**2 < (Ny/4)**2
-
-
+            self.F[:,:,i] *= self.rho0 / self.rho
+                
         # Simulation Main Loop
         for it in range(its):
-        
             # Drift
-            for i, cx, cy in zip(idxs, self.cxs, self.cys):
+            for i, cx, cy in zip(idxs, cxs, cys):
                 self.F[:,:,i] = np.roll(self.F[:,:,i], cx, axis=1)
                 self.F[:,:,i] = np.roll(self.F[:,:,i], cy, axis=0)
-            
+                        
             # Set reflective boundaries
-            bndryF = self.F[cylinder,:]
+            bndryF = self.F[self.object_mask,:]
             bndryF = bndryF[:,[0,5,6,7,8,1,2,3,4]]
-            
+        
             # Calculate fluid variables
-            rho = np.sum(self.F,2)
-            ux  = np.sum(self.F*self.cxs,2) / rho
-            uy  = np.sum(self.F*self.cys,2) / rho
+            self.rho = np.sum(self.F,2)
+            self.ux  = np.sum(self.F*cxs,2) / self.rho
+            self.uy  = np.sum(self.F*cys,2) / self.rho
             
             # Apply Collision
-            Feq = np.zeros_like(self.F)
-            for i, cx, cy, w in zip(idxs, self.cxs, self.cys, self.weights):
-                Feq[:,:,i] = rho*w* (1 + 3*(cx*ux+cy*uy) + 9*(cx*ux+cy*uy)**2/2 - 3*(ux**2+uy**2)/2)
+            Feq = np.zeros(self.F.shape)
+            for i, cx, cy, w in zip(idxs, cxs, cys, weights):
+                Feq[:,:,i] = self.rho * w * ( 1 + 3*(cx*self.ux+cy*self.uy) +
+                                              9*(cx*self.ux+cy*self.uy)**2/2 -
+                                              3*(self.ux**2+self.uy**2)/2 )
             
             self.F += -(1.0/self.tau) * (self.F - Feq)
             
             # Apply boundary 
-            self.F[cylinder,:] = bndryF
+            self.F[self.object_mask,:] = bndryF
+            self.ux[self.object_mask] = 0
+            self.uy[self.object_mask] = 0
 
-            ux[cylinder] = 0
-            uy[cylinder] = 0
-            self.vorticity = (np.roll(ux, -1, axis=0) - np.roll(ux, 1, axis=0)) - (np.roll(uy, -1, axis=1) - np.roll(uy, 1, axis=1))
-            self.vorticity[cylinder] = np.nan
-
-            cb(it, self)
+            if it % 10 == 0:
+                if cb:
+                    cb(it, self)
